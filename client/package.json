@@ -20,9 +20,9 @@
     "pretest:e2e": "node scripts/sync-relay.js",
     "test:e2e": "node test/e2e/smoke.js",
     "predist": "node scripts/sync-relay.js",
-    "dist": "electron-builder --win --publish never",
+    "dist": "electron-builder --config electron-builder.config.js --win --publish never",
     "predist:dir": "node scripts/sync-relay.js",
-    "dist:dir": "electron-builder --win --dir --publish never"
+    "dist:dir": "electron-builder --config electron-builder.config.js --win --dir --publish never"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -31,47 +31,5 @@
     "electron": "^45.2.3",
     "electron-builder": "^26.0.12",
     "playwright-core": "^1.65.0"
-  },
-  "build": {
-    "appId": "com.memedrop.app",
-    "productName": "MemeDrop",
-    "copyright": "MemeDrop",
-    "directories": {
-      "output": "dist",
-      "buildResources": "assets"
-    },
-    "files": [
-      "src/**/*",
-      "assets/**/*",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icon.ico"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "MemeDrop",
-      "runAfterFinish": true
-    },
-    "publish": null,
-    "protocols": [
-      {
-        "name": "MemeDrop invite",
-        "schemes": [
-          "memedrop"
-        ]
-      }
-    ]
   }
 }
