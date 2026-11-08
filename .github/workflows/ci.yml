@@ -1,0 +1,68 @@
+name: CI
+
+# Runs the tests, then builds the Windows installer and attaches it to the run
+# (Actions tab → pick a run → "Artifacts" → MemeDrop-Windows-Installer).
+on:
+  push:
+    paths:
+      - 'server/**'
+      - 'client/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server tests
+        working-directory: server
+        run: |
+          npm ci
+          npm test
+      - name: Client tests
+        working-directory: client
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          npm ci
+          npm test
+
+  windows:
+    name: Windows installer
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: |
+          npm ci --prefix server
+          npm ci --prefix client
+      - name: Client tests on Windows
+        working-directory: client
+        run: npm test
+      - name: Build installer
+        working-directory: client
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MemeDrop-Windows-Installer
+          path: client/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30
