@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- Only our own scripts, and only images that are inline data or from GIPHY. -->
+    <!-- Only our own scripts; media is either in-memory (blob:) or from GIPHY. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data: https://giphy.com https://*.giphy.com; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: https://giphy.com https://*.giphy.com; media-src blob:; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
     <title>MemeDrop overlay</title>
@@ -14,6 +14,7 @@
   <body>
     <div id="stage" aria-hidden="true"></div>
     <script src="../../shared/layout.js"></script>
+    <script src="../../shared/sounds.js"></script>
     <script src="overlay.js"></script>
   </body>
 </html>

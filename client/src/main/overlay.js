@@ -68,6 +68,8 @@ class OverlayManager {
         sandbox: true,
         backgroundThrottling: false,
         spellcheck: false,
+        // Nobody ever clicks the overlay, so let videos and sounds play anyway.
+        autoplayPolicy: 'no-user-gesture-required',
       },
     });
     this.win.setAlwaysOnTop(true, 'screen-saver');
@@ -126,8 +128,8 @@ class OverlayManager {
   }
 
   /**
-   * Show a drop. `drop` = { id, src, kind, opacity, durationMs, position,
-   * from, title, width, height, preview }.
+   * Show a drop. `drop` = { id, kind, bytes | src, mime, opacity, durationMs,
+   * position, from, title, width, height, preview, sound, videoSound, volume }.
    */
   show(drop) {
     this.create();

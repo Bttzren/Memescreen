@@ -512,3 +512,19 @@ test('invite links open a friendly landing page', async () => {
     assert.equal((await fetch(`http://127.0.0.1:${server.port}/join/`)).status, 404);
   });
 });
+
+test('a busy port is reported as an error, not a crash', async () => {
+  const http = require('node:http');
+  const { startServer } = require('../src/server');
+  const blocker = http.createServer();
+  await new Promise((r) => blocker.listen(0, '127.0.0.1', r));
+  try {
+    await assert.rejects(
+      startServer({ port: blocker.address().port, host: '127.0.0.1', log: () => {} }),
+      (err) => err.code === 'EADDRINUSE',
+    );
+    await new Promise((r) => setTimeout(r, 50)); // an uncaught error would have fired by now
+  } finally {
+    blocker.close();
+  }
+});

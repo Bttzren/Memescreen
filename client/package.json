@@ -12,10 +12,16 @@
   },
   "private": true,
   "scripts": {
+    "sync-relay": "node scripts/sync-relay.js",
+    "prestart": "node scripts/sync-relay.js",
     "start": "electron .",
+    "pretest": "node scripts/sync-relay.js",
     "test": "node --test test/*.test.js",
+    "pretest:e2e": "node scripts/sync-relay.js",
     "test:e2e": "node test/e2e/smoke.js",
+    "predist": "node scripts/sync-relay.js",
     "dist": "electron-builder --win --publish never",
+    "predist:dir": "node scripts/sync-relay.js",
     "dist:dir": "electron-builder --win --dir --publish never"
   },
   "dependencies": {
@@ -58,6 +64,14 @@
       "shortcutName": "MemeDrop",
       "runAfterFinish": true
     },
-    "publish": null
+    "publish": null,
+    "protocols": [
+      {
+        "name": "MemeDrop invite",
+        "schemes": [
+          "memedrop"
+        ]
+      }
+    ]
   }
 }

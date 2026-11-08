@@ -12,12 +12,12 @@ const ASSETS = path.join(__dirname, '..', '..', 'assets');
 function createTray({
   onOpen,
   onToggleMute,
+  onToggleSounds,
   onToggleStartup,
   onPickDisplay,
   getDisplays,
   onClear,
   onQuit,
-  hotkeyLabel,
   canStartWithOs,
 }) {
   const icons = {
@@ -25,12 +25,22 @@ function createTray({
     muted: nativeImage.createFromPath(path.join(ASSETS, 'tray-muted.png')),
   };
   const tray = new Tray(icons.normal);
-  let current = { muted: false, status: 'disconnected', room: null, hotkeyOk: true, startWithOs: false, displayId: 'main' };
+  let current = {
+    muted: false,
+    soundsEnabled: true,
+    status: 'disconnected',
+    room: null,
+    hosting: false,
+    hotkeyOk: true,
+    hotkeyLabel: 'Ctrl+Shift+X',
+    startWithOs: false,
+    displayId: 'main',
+  };
 
   function render() {
     const statusLine =
       current.status === 'connected'
-        ? `Connected to room ${current.room}`
+        ? `${current.hosting ? 'Hosting' : 'In'} room ${current.room}`
         : current.status === 'connecting' || current.status === 'reconnecting'
           ? 'Connecting…'
           : 'Not connected';
@@ -43,8 +53,9 @@ function createTray({
         { label: statusLine, enabled: false },
         { type: 'separator' },
         { label: 'Mute incoming memes', type: 'checkbox', checked: current.muted, click: onToggleMute },
+        { label: 'Play sounds', type: 'checkbox', checked: current.soundsEnabled, click: onToggleSounds },
         {
-          label: current.hotkeyOk ? `Clear screen now (${hotkeyLabel})` : 'Clear screen now',
+          label: current.hotkeyOk ? `Clear screen now (${current.hotkeyLabel})` : 'Clear screen now',
           click: onClear,
         },
         ...displayMenu(),

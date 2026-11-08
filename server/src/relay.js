@@ -78,6 +78,9 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
   const maxPayload = Math.ceil((biggestDrop * 4) / 3) + 512 * 1024;
 
   const wss = new WebSocketServer({ server, maxPayload, perMessageDeflate: false });
+  // ws re-emits the HTTP server's errors (e.g. EADDRINUSE). Without a listener
+  // that would be an uncaught exception; startServer() reports it instead.
+  wss.on('error', (err) => log('debug', `websocket server error: ${err.message}`));
   /** @type {Map<string, Map<string, Client>>} room code -> (client id -> client) */
   const rooms = new Map();
   /** @type {Set<Client>} every connected socket, joined or not */

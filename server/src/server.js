@@ -53,13 +53,18 @@ async function startServer({
 
   const relay = createRelay({ server, giphy, limits, ...(log ? { log } : {}) });
 
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, host, () => {
-      server.off('error', reject);
-      resolve();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, host, () => {
+        server.off('error', reject);
+        resolve();
+      });
     });
-  });
+  } catch (err) {
+    await relay.close(); // e.g. port already in use: don't leave timers behind
+    throw err;
+  }
 
   const actualPort = server.address().port;
 

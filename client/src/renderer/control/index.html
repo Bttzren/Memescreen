@@ -1,76 +1,152 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="bubblegum">
   <head>
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://giphy.com https://*.giphy.com; connect-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://giphy.com https://*.giphy.com; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
     <title>MemeDrop</title>
     <link rel="stylesheet" href="control.css" />
   </head>
   <body>
-    <!-- ============ Connect screen ============ -->
-    <main id="connect-view" class="view connect-view">
+    <!-- ================= Welcome ================= -->
+    <main id="welcome-view" class="view center-view" hidden>
+      <button class="icon-btn corner-btn" type="button" data-open-settings title="Settings">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear" /></svg>
+      </button>
       <div class="brand">
-        <img src="../../../assets/icon-256.png" alt="" class="brand-icon" width="72" height="72" />
+        <img src="../../../assets/icon-256.png" alt="" class="brand-icon" width="76" height="76" />
         <h1>MemeDrop</h1>
-        <p class="tagline">Drop memes on your friends' screens.</p>
+        <p class="tagline">Drop memes, GIFs, videos and sounds on your friends' screens.</p>
       </div>
-
-      <form id="connect-form" class="card connect-card" novalidate>
-        <label class="field">
-          <span>Server address</span>
-          <input id="server-url" autocomplete="off" spellcheck="false" placeholder="ws://192.168.1.20:8787" />
-        </label>
-        <label class="field">
-          <span>Room code</span>
-          <input id="room" autocomplete="off" spellcheck="false" maxlength="32" placeholder="PIZZA-GANG" />
-        </label>
-        <label class="field">
-          <span>Nickname</span>
-          <input id="nickname" autocomplete="off" spellcheck="false" maxlength="24" placeholder="What your friends see" />
-        </label>
-        <p id="connect-error" class="form-error" role="alert" hidden></p>
-        <button type="submit" class="btn btn-primary btn-block" id="connect-btn">Join room</button>
-      </form>
-
-      <p class="hint">
-        Ask whoever runs the server for its address. Everyone who joins the same room code can drop memes on each other.
-      </p>
+      <div class="choices">
+        <button type="button" class="choice" id="go-host">
+          <span class="choice-emoji" aria-hidden="true">🏠</span>
+          <span class="choice-text">
+            <strong>Host a room</strong>
+            <span>Start a room and send your friends the invite link</span>
+          </span>
+        </button>
+        <button type="button" class="choice" id="go-join">
+          <span class="choice-emoji" aria-hidden="true">🔗</span>
+          <span class="choice-text">
+            <strong>Join a room</strong>
+            <span>Got an invite link from a friend? Start here</span>
+          </span>
+        </button>
+      </div>
+      <p class="hint">Only one person hosts. Everyone else joins with the link.</p>
     </main>
 
-    <!-- ============ Main screen ============ -->
+    <!-- ================= Host ================= -->
+    <main id="host-view" class="view center-view" hidden>
+      <div class="subhead">
+        <button type="button" class="back-btn" data-back>← Back</button>
+        <h2>Host a room</h2>
+      </div>
+      <form id="host-form" class="card stack" novalidate>
+        <label class="field">
+          <span>Your nickname</span>
+          <input id="host-nickname" autocomplete="off" spellcheck="false" maxlength="24" placeholder="What your friends see" />
+        </label>
+        <label class="field">
+          <span>Room name</span>
+          <span class="input-row">
+            <input id="host-room" autocomplete="off" spellcheck="false" maxlength="32" />
+            <button type="button" id="host-dice" class="icon-btn square" title="Pick a random name">🎲</button>
+          </span>
+        </label>
+        <fieldset class="field">
+          <legend>Who can join?</legend>
+          <label class="radio-card">
+            <input type="radio" name="host-mode" value="internet" checked />
+            <span>
+              <strong>Friends anywhere</strong>
+              <small>Works over the internet. The first time, MemeDrop downloads a small free helper from Cloudflare.</small>
+            </span>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="host-mode" value="lan" />
+            <span>
+              <strong>Only people on my Wi-Fi</strong>
+              <small>Same house or network. If Windows asks, click “Allow access”.</small>
+            </span>
+          </label>
+        </fieldset>
+        <p id="host-error" class="form-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block" id="host-start">Start room</button>
+      </form>
+      <div id="host-progress" class="card stack progress-card" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="host-step" class="progress-step">Starting your room…</p>
+        <div id="host-bar" class="progress-bar" hidden><div></div></div>
+        <button type="button" class="btn btn-ghost" id="host-cancel">Cancel</button>
+      </div>
+    </main>
+
+    <!-- ================= Join ================= -->
+    <main id="join-view" class="view center-view" hidden>
+      <div class="subhead">
+        <button type="button" class="back-btn" data-back>← Back</button>
+        <h2>Join a room</h2>
+      </div>
+      <form id="join-form" class="card stack" novalidate>
+        <label class="field">
+          <span>Your nickname</span>
+          <input id="join-nickname" autocomplete="off" spellcheck="false" maxlength="24" placeholder="What your friends see" />
+        </label>
+        <label class="field">
+          <span>Invite link</span>
+          <input id="join-invite" autocomplete="off" spellcheck="false" placeholder="Paste the link your friend sent you" />
+        </label>
+        <button type="button" id="join-paste" class="paste-chip" hidden>📋 Use the invite link you copied</button>
+        <details id="join-advanced" class="advanced">
+          <summary>No link? Connect with a server address</summary>
+          <div class="stack">
+            <label class="field">
+              <span>Server address</span>
+              <input id="server-url" autocomplete="off" spellcheck="false" placeholder="ws://192.168.1.20:8787" />
+            </label>
+            <label class="field">
+              <span>Room code</span>
+              <input id="room" autocomplete="off" spellcheck="false" maxlength="32" placeholder="PIZZA-GANG" />
+            </label>
+          </div>
+        </details>
+        <p id="join-error" class="form-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block" id="join-btn">Join room</button>
+      </form>
+    </main>
+
+    <!-- ================= Main ================= -->
     <main id="main-view" class="view main-view" hidden>
       <header class="topbar">
         <div class="room-info">
           <span id="status-dot" class="status-dot" aria-hidden="true"></span>
           <div class="room-text">
-            <div class="room-code" id="room-code" title="Room code — share it with friends">—</div>
+            <div class="room-code" id="room-code">—</div>
             <div class="me" id="me-line">connecting…</div>
           </div>
         </div>
         <div class="top-actions">
+          <button id="invite-btn" class="btn btn-small btn-accent" type="button" title="Copy the invite link">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link" /></svg>
+            Invite
+          </button>
           <button id="mute-btn" class="icon-btn" type="button" aria-pressed="false" title="Mute incoming memes">
-            <svg class="icon icon-bell" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 6 2.5 7H3.5C4.5 15 6 13 6 9Z" />
-              <path d="M10 19.5a2.2 2.2 0 0 0 4 0" />
-            </svg>
-            <svg class="icon icon-bell-off" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8.7 4.1A6 6 0 0 1 18 9c0 2.6.6 4.3 1.3 5.5M17 16H3.5C4.5 15 6 13 6 9c0-.7.1-1.3.3-1.9" />
-              <path d="M10 19.5a2.2 2.2 0 0 0 4 0M3 3l18 18" />
-            </svg>
+            <svg class="icon icon-bell" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bell" /></svg>
+            <svg class="icon icon-bell-off" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bell-off" /></svg>
           </button>
           <button id="clear-btn" class="icon-btn" type="button" title="Clear my screen">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" />
-            </svg>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash" /></svg>
+          </button>
+          <button class="icon-btn" type="button" data-open-settings title="Settings">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear" /></svg>
           </button>
           <button id="leave-btn" class="icon-btn" type="button" title="Leave room">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" />
-            </svg>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-leave" /></svg>
           </button>
         </div>
       </header>
@@ -78,83 +154,89 @@
       <div id="banners" class="banners" aria-live="polite"></div>
 
       <section class="send-to">
-        <div class="section-title">Send to</div>
-        <div id="targets" class="chips" role="radiogroup" aria-label="Send to"></div>
-        <p id="alone-hint" class="alone-hint" hidden></p>
+        <div class="section-title">Send to <span class="section-hint">(click several friends to pick more than one)</span></div>
+        <div id="targets" class="chips" role="group" aria-label="Send to"></div>
+        <div id="alone-hint" class="alone-hint" hidden>
+          <span>Nobody else is here yet. Send your friends the invite link!</span>
+          <button type="button" class="btn btn-small btn-accent" id="alone-invite">Copy invite link</button>
+        </div>
       </section>
 
       <nav class="tabs" role="tablist">
-        <button type="button" role="tab" class="tab" id="tab-upload" data-tab="upload" aria-selected="true" aria-controls="panel-upload">
-          Upload
-        </button>
-        <button type="button" role="tab" class="tab" id="tab-gifs" data-tab="gifs" aria-selected="false" aria-controls="panel-gifs">
-          Search GIFs
-        </button>
+        <button type="button" role="tab" class="tab" data-tab="upload" aria-selected="true">📁 Upload</button>
+        <button type="button" role="tab" class="tab" data-tab="gifs" aria-selected="false">🔍 GIFs</button>
+        <button type="button" role="tab" class="tab" data-tab="sounds" aria-selected="false">🔊 Sounds</button>
       </nav>
 
       <div class="panels">
-        <!-- Upload tab -->
-        <section id="panel-upload" class="panel" role="tabpanel" aria-labelledby="tab-upload">
-          <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choose an image">
-            <input type="file" id="file-input" accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp" hidden />
+        <!-- Upload -->
+        <section id="panel-upload" class="panel" role="tabpanel">
+          <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choose an image or video">
+            <input type="file" id="file-input" hidden
+              accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,.png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.m4v,.mov" />
             <div class="dz-empty" id="dz-empty">
-              <svg class="dz-icon" viewBox="0 0 48 48" aria-hidden="true">
-                <rect x="6" y="9" width="36" height="30" rx="6" />
-                <circle cx="17" cy="19" r="3.5" />
-                <path d="M6 33l10-9 8 7 6-5 12 10" />
-              </svg>
-              <strong>Drop an image here</strong>
+              <span class="dz-emoji" aria-hidden="true">🖼️ 🎬</span>
+              <strong>Drop an image or video here</strong>
               <span>or click to browse · <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste</span>
-              <span class="dz-limits" id="dz-limits">PNG, JPG, GIF or WebP · up to 5 MB</span>
+              <span class="dz-limits" id="dz-limits">Images: PNG, JPG, GIF, WebP up to 5 MB · Videos: MP4, WebM up to 20 MB</span>
             </div>
             <div class="dz-preview" id="dz-preview" hidden>
-              <img id="upload-preview" alt="" />
+              <div class="dz-media" id="dz-media"></div>
               <div class="dz-meta">
                 <span id="upload-name" class="dz-name"></span>
                 <span id="upload-size" class="dz-size"></span>
               </div>
-              <button id="upload-clear" class="icon-btn small" type="button" title="Remove image">
-                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              <button id="upload-clear" class="icon-btn small dz-remove" type="button" title="Remove">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x" /></svg>
               </button>
             </div>
           </div>
         </section>
 
-        <!-- GIF tab -->
-        <section id="panel-gifs" class="panel panel-gifs" role="tabpanel" aria-labelledby="tab-gifs" hidden>
-          <form id="gif-search-form" class="gif-search" role="search">
-            <input id="gif-query" type="search" placeholder="Search GIPHY" maxlength="50" autocomplete="off" spellcheck="false" />
-            <button type="submit" class="btn btn-secondary">Search</button>
-          </form>
-          <div class="gif-header">
-            <span id="gif-heading">Trending</span>
-            <button id="gif-back" class="link-btn" type="button" hidden>Back to trending</button>
+        <!-- GIFs -->
+        <section id="panel-gifs" class="panel" role="tabpanel" hidden>
+          <div id="gif-setup" class="gif-setup" hidden></div>
+          <div id="gif-browser" class="gif-browser">
+            <form id="gif-search-form" class="gif-search" role="search">
+              <input id="gif-query" type="search" placeholder="Search GIPHY" maxlength="50" autocomplete="off" spellcheck="false" />
+              <button type="submit" class="btn btn-secondary">Search</button>
+            </form>
+            <div class="gif-header">
+              <span id="gif-heading">Trending</span>
+              <button id="gif-back" class="link-btn" type="button" hidden>Back to trending</button>
+            </div>
+            <div id="gif-scroll" class="gif-scroll">
+              <div id="gif-grid" class="gif-grid"></div>
+              <div id="gif-status" class="gif-status"></div>
+              <button id="gif-more" class="btn btn-ghost btn-block" type="button" hidden>Load more</button>
+            </div>
+            <a id="giphy-link" class="giphy-attribution" href="https://giphy.com" title="Open GIPHY">
+              <span class="powered">Powered by</span> <span class="giphy-wordmark">GIPHY</span>
+            </a>
           </div>
-          <div id="gif-scroll" class="gif-scroll">
-            <div id="gif-grid" class="gif-grid"></div>
-            <div id="gif-status" class="gif-status"></div>
-            <button id="gif-more" class="btn btn-ghost btn-block" type="button" hidden>Load more</button>
-          </div>
-          <a id="giphy-link" class="giphy-attribution" href="https://giphy.com" title="Open GIPHY">
-            <span class="powered">Powered by</span>
-            <span class="giphy-wordmark">GIPHY</span>
-          </a>
+        </section>
+
+        <!-- Sounds -->
+        <section id="panel-sounds" class="panel" role="tabpanel" hidden>
+          <p class="panel-hint">Pick a sound to play on their speakers. Click to hear it, double-click to send it right away.</p>
+          <div id="soundboard" class="soundboard"></div>
+          <input type="file" id="sound-input" hidden accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,.mp3,.wav,.ogg,.m4a" />
         </section>
       </div>
 
       <!-- Shared sender controls -->
       <section class="controls">
-        <div class="control-row">
+        <div class="control-row" data-visual>
           <label for="opacity">Opacity</label>
           <input type="range" id="opacity" min="10" max="100" step="5" value="100" />
           <output id="opacity-out" for="opacity">100%</output>
         </div>
-        <div class="control-row">
+        <div class="control-row" data-visual>
           <label for="duration">Duration</label>
           <input type="range" id="duration" min="1" max="15" step="1" value="4" />
           <output id="duration-out" for="duration">4s</output>
         </div>
-        <div class="control-row">
+        <div class="control-row" data-visual>
           <span class="label">Position</span>
           <div id="position" class="segmented" role="radiogroup" aria-label="Position">
             <button type="button" role="radio" data-value="random">Random</button>
@@ -162,18 +244,100 @@
             <button type="button" role="radio" data-value="fullscreen">Full screen</button>
           </div>
         </div>
-        <div id="selection-summary" class="selection-summary">Pick an image or a GIF.</div>
+        <div class="control-row" data-visual>
+          <label for="sound-select">Sound</label>
+          <div class="sound-pick">
+            <select id="sound-select"></select>
+            <button type="button" class="icon-btn small" id="sound-test" title="Hear it">▶</button>
+          </div>
+        </div>
+        <div class="control-row checks" id="video-options" hidden>
+          <span class="label">Video</span>
+          <div class="check-group">
+            <label class="check"><input type="checkbox" id="video-sound" checked /> Play its sound</label>
+            <label class="check"><input type="checkbox" id="video-full" /> Play the whole clip</label>
+          </div>
+        </div>
+        <div id="selection-summary" class="selection-summary">Pick something to drop.</div>
         <div class="actions">
           <button id="preview-btn" class="btn btn-ghost" type="button" title="Show it on your own screen first">Preview on me</button>
-          <button id="send-btn" class="btn btn-primary" type="button" title="Ctrl+Enter">
-            <span class="send-label">Drop it!</span>
-          </button>
+          <button id="send-btn" class="btn btn-primary" type="button" title="Ctrl+Enter"><span class="send-label">Drop it!</span></button>
         </div>
       </section>
     </main>
 
+    <!-- ================= Settings ================= -->
+    <aside id="settings" class="settings" hidden aria-label="Settings">
+      <div class="settings-head">
+        <h2>Settings</h2>
+        <button type="button" class="icon-btn" id="settings-close" title="Close (Esc)">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x" /></svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <section class="setting">
+          <h3>Colors</h3>
+          <div id="theme-list" class="theme-list" role="radiogroup" aria-label="Color theme"></div>
+        </section>
+
+        <section class="setting">
+          <h3>Panic button</h3>
+          <p class="setting-help">Instantly clears everything on your screen and stops all sounds, from any app.</p>
+          <div class="hotkey-row">
+            <div id="hotkey-keys" class="keys" aria-live="polite"></div>
+            <button type="button" class="btn btn-secondary btn-small" id="hotkey-change">Change</button>
+            <button type="button" class="link-btn" id="hotkey-reset">Reset</button>
+          </div>
+          <p id="hotkey-msg" class="setting-msg" hidden></p>
+        </section>
+
+        <section class="setting">
+          <h3>Sounds</h3>
+          <label class="switch-row">
+            <span>Play sounds friends send me</span>
+            <input type="checkbox" id="sounds-enabled" class="switch" />
+          </label>
+          <div class="control-row compact">
+            <label for="sound-volume">Volume</label>
+            <input type="range" id="sound-volume" min="0" max="100" step="5" value="80" />
+            <output id="sound-volume-out" for="sound-volume">80%</output>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" id="sound-volume-test">▶ Test volume</button>
+        </section>
+
+        <section class="setting">
+          <h3>GIF search</h3>
+          <div id="giphy-settings"></div>
+        </section>
+
+        <section class="setting">
+          <h3>Incoming memes</h3>
+          <label class="switch-row">
+            <span>Mute everything friends send</span>
+            <input type="checkbox" id="settings-muted" class="switch" />
+          </label>
+          <p class="setting-help">Right-click the MemeDrop icon by the clock for more: pick which screen memes show on, start with Windows, or quit.</p>
+        </section>
+
+        <p class="about" id="about"></p>
+      </div>
+    </aside>
+
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+    <!-- Icons -->
+    <svg class="sprite" width="0" height="0" aria-hidden="true">
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 6 2.5 7H3.5C4.5 15 6 13 6 9Z" /><path d="M10 19.5a2.2 2.2 0 0 0 4 0" /></symbol>
+      <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M8.7 4.1A6 6 0 0 1 18 9c0 2.6.6 4.3 1.3 5.5M17 16H3.5C4.5 15 6 13 6 9c0-.7.1-1.3.3-1.9" /><path d="M10 19.5a2.2 2.2 0 0 0 4 0M3 3l18 18" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" /></symbol>
+      <symbol id="i-leave" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></symbol>
+    </svg>
+
+    <script src="../../shared/hotkey.js"></script>
+    <script src="../../shared/sounds.js"></script>
     <script src="control.js"></script>
   </body>
 </html>

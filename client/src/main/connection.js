@@ -167,6 +167,9 @@ class Connection extends EventEmitter {
       case 'roster':
         this.setState({ peers: Array.isArray(msg.peers) ? msg.peers : [] });
         break;
+      case 'features':
+        this.setState({ features: { giphy: Boolean(msg.features && msg.features.giphy) } });
+        break;
       case 'drop':
         this.emit('drop', msg);
         break;

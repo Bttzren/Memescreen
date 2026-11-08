@@ -12,18 +12,29 @@ const {
   powerMonitor,
   screen,
   session,
+  clipboard,
+  safeStorage,
+  net,
 } = require('electron');
 const { Connection } = require('./connection');
 const { OverlayManager } = require('./overlay');
 const { createTray } = require('./tray');
 const { createSettings } = require('./settings');
+const { HostManager } = require('./host');
+const { Tunnel } = require('./tunnel');
+const { startServer } = require('../relay/server');
 const V = require('../shared/validate');
+const { parseInvite, buildInviteLink, randomRoomName } = require('../shared/invite');
+const Hotkey = require('../shared/hotkey');
 
-const PANIC_HOTKEY = 'CommandOrControl+Shift+X';
-const HOTKEY_LABEL = process.platform === 'darwin' ? 'Cmd+Shift+X' : 'Ctrl+Shift+X';
+const THEMES = ['bubblegum', 'ocean', 'lime', 'sunset', 'mono', 'light'];
+const PROTOCOL = 'memedrop';
 const ASSETS = path.join(__dirname, '..', '..', 'assets');
 const START_HIDDEN = process.argv.includes('--hidden');
 const CAN_START_WITH_OS = process.platform === 'win32' || process.platform === 'darwin';
+// Dev/test hooks (not needed by normal users).
+const GIPHY_BASE_URL = process.env.MEMEDROP_GIPHY_BASE_URL || '';
+const TUNNEL_BIN = process.env.MEMEDROP_TUNNEL_BIN || '';
 
 // Optional: run a second copy on the same PC for testing (separate settings + lock).
 if (process.env.MEMEDROP_USER_DATA) app.setPath('userData', path.resolve(process.env.MEMEDROP_USER_DATA));
@@ -36,19 +47,45 @@ if (!app.requestSingleInstanceLock()) {
   run();
 }
 
+function findDeepLink(argv) {
+  return (argv || []).find((a) => typeof a === 'string' && a.toLowerCase().startsWith(`${PROTOCOL}://`)) || null;
+}
+
 function run() {
   let controlWin = null;
   let tray = null;
   let overlay = null;
   let settings = null;
+  let host = null;
   let quitting = false;
-  let hotkeyOk = false;
+  let ready = false;
+  let role = null; // 'host' | 'join' | null
+  let hotkey = { accelerator: Hotkey.DEFAULT_HOTKEY, ok: false };
   let trayHintShown = false;
+  let pendingInvite = findDeepLink(process.argv);
   const connection = new Connection();
 
   if (process.platform === 'win32') app.setAppUserModelId('com.memedrop.app');
 
-  app.on('second-instance', () => showControlWindow());
+  // Clicking a memedrop:// invite opens (or focuses) MemeDrop and joins.
+  if (!process.env.MEMEDROP_USER_DATA && (app.isPackaged || process.platform === 'win32')) {
+    if (process.defaultApp && process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    } else {
+      app.setAsDefaultProtocolClient(PROTOCOL);
+    }
+  }
+
+  app.on('second-instance', (_event, argv) => {
+    showControlWindow();
+    const link = findDeepLink(argv);
+    if (link) handleInvite(link);
+  });
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleInvite(url);
+  });
 
   app.on('web-contents-created', (_event, contents) => {
     // No popups, no navigating away from our own pages.
@@ -61,17 +98,33 @@ function run() {
   });
 
   app.whenReady().then(() => {
-    settings = createSettings(app.getPath('userData'));
+    settings = createSettings(app.getPath('userData'), secureStorage());
     Menu.setApplicationMenu(null);
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
     overlay = new OverlayManager({ displayId: settings.get().displayId });
     overlay.create(); // warm it up so the first meme appears instantly
 
+    const tunnel = new Tunnel({
+      dir: path.join(app.getPath('userData'), 'bin'),
+      fetch: (url, opts) => net.fetch(url, opts),
+      binary: TUNNEL_BIN || undefined,
+    });
+    host = new HostManager({
+      tunnel,
+      startServer: (opts) =>
+        startServer({ ...opts, giphyOptions: GIPHY_BASE_URL ? { baseUrl: GIPHY_BASE_URL } : {}, log: hostLog }),
+      log: (msg) => console.log(`[host] ${msg}`),
+    });
+    host.on('state', () => {
+      tray.update({ hosting: role === 'host' && host.state.status === 'on' });
+      sendState();
+    });
+
     tray = createTray({
-      hotkeyLabel: HOTKEY_LABEL,
       onOpen: () => showControlWindow(),
       onToggleMute: () => setMuted(!settings.get().muted),
+      onToggleSounds: () => updateSettings({ soundsEnabled: !settings.get().soundsEnabled }),
       onToggleStartup: () => setStartWithOs(!getStartWithOs()),
       onPickDisplay: (displayId) => {
         settings.update({ displayId });
@@ -84,12 +137,16 @@ function run() {
       onQuit: () => quit(),
     });
 
-    hotkeyOk = globalShortcut.register(PANIC_HOTKEY, () => overlay.clearAll());
-    if (!hotkeyOk) console.warn(`Could not register ${HOTKEY_LABEL} (another app may be using it).`);
+    const saved = settings.get().panicHotkey;
+    hotkey = { accelerator: Hotkey.isPlausibleAccelerator(saved) ? saved : Hotkey.DEFAULT_HOTKEY, ok: false };
+    hotkey.ok = registerPanic(hotkey.accelerator);
+    if (!hotkey.ok) console.warn(`Could not register ${hotkeyLabel()} (another app may be using it).`);
 
     tray.update({
       muted: settings.get().muted,
-      hotkeyOk,
+      soundsEnabled: settings.get().soundsEnabled,
+      hotkeyOk: hotkey.ok,
+      hotkeyLabel: hotkeyLabel(),
       startWithOs: getStartWithOs(),
       displayId: settings.get().displayId,
     });
@@ -102,17 +159,24 @@ function run() {
 
     connection.on('state', (state) => {
       tray.update({ status: state.status, room: state.room });
-      sendToControl('state', uiState());
+      sendState();
     });
     connection.on('drop', handleIncomingDrop);
     connection.on('server-error', (msg) => sendToControl('notice', { kind: 'error', text: msg.message }));
 
-    powerMonitor.on('resume', () => connection.reconnectNow && connection.reconnectNow());
+    powerMonitor.on('resume', () => connection.reconnectNow());
 
+    ready = true;
     const s = settings.get();
-    if (s.autoConnect && V.normalizeRoom(s.room) && V.normalizeNickname(s.nickname)) {
+    if (pendingInvite) {
+      const link = pendingInvite;
+      pendingInvite = null;
+      handleInvite(link);
+    } else if (s.role === 'join' && s.autoConnect) {
       const url = V.normalizeServerUrl(s.serverUrl);
-      if (url) connection.connect({ url, room: V.normalizeRoom(s.room), nickname: V.normalizeNickname(s.nickname) });
+      const room = V.normalizeRoom(s.room);
+      const nickname = V.normalizeNickname(s.nickname);
+      if (url && room && nickname) joinRoom({ serverUrl: url, room, nickname, link: s.inviteLink });
     }
   });
 
@@ -123,6 +187,7 @@ function run() {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     connection.disconnect({ silent: true });
+    if (host) host.teardown(); // also stops the tunnel helper process
     if (settings) settings.flush();
   });
 
@@ -134,12 +199,31 @@ function run() {
     app.quit();
   }
 
+  function hostLog(level, message) {
+    if (level === 'debug') return;
+    console.log(`[room] ${message}`);
+  }
+
+  function secureStorage() {
+    try {
+      if (!safeStorage.isEncryptionAvailable()) return null;
+    } catch {
+      return null;
+    }
+    return {
+      encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+      decrypt: (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64')),
+    };
+  }
+
+  // ------------------------------------------------------------------ windows
+
   function createControlWindow() {
     controlWin = new BrowserWindow({
-      width: 460,
-      height: 780,
-      minWidth: 400,
-      minHeight: 620,
+      width: 480,
+      height: 820,
+      minWidth: 420,
+      minHeight: 660,
       show: false,
       title: 'MemeDrop',
       icon: path.join(ASSETS, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
@@ -151,6 +235,7 @@ function run() {
         nodeIntegration: false,
         sandbox: true,
         spellcheck: false,
+        autoplayPolicy: 'no-user-gesture-required',
       },
     });
     controlWin.loadFile(path.join(__dirname, '..', 'renderer', 'control', 'index.html'));
@@ -182,63 +267,243 @@ function run() {
     if (controlWin && !controlWin.isDestroyed()) controlWin.webContents.send(channel, payload);
   }
 
+  // -------------------------------------------------------------------- state
+
+  function hotkeyLabel(accel = hotkey.accelerator) {
+    return Hotkey.acceleratorLabel(accel, process.platform);
+  }
+
+  /** The link anyone in the room can share to invite more friends. */
+  function currentInviteLink() {
+    if (role === 'host') return host.state.inviteLink;
+    const { url, room } = connection.state;
+    if (!url || !room) return null;
+    const saved = settings.get().inviteLink;
+    if (saved) {
+      const parsed = parseInvite(saved);
+      if (parsed && parsed.room === room && parsed.serverUrl === url) return saved;
+    }
+    const httpBase = url.replace(/^ws/i, 'http').replace(/\/+$/, '');
+    return buildInviteLink(httpBase, room);
+  }
+
+  function publicSettings() {
+    const s = settings.get();
+    const { giphyKey, ...rest } = s;
+    return { ...rest, hasGiphyKey: Boolean(giphyKey) };
+  }
+
   function uiState() {
+    const s = settings.get();
     return {
       ...connection.state,
-      muted: settings.get().muted,
-      hotkey: { label: HOTKEY_LABEL, ok: hotkeyOk },
+      role,
+      host: host ? host.state : null,
+      inviteLink: currentInviteLink(),
+      muted: s.muted,
+      soundsEnabled: s.soundsEnabled,
+      soundVolume: s.soundVolume,
+      theme: s.theme,
+      hasGiphyKey: Boolean(s.giphyKey),
+      hotkey: { accelerator: hotkey.accelerator, label: hotkeyLabel(), ok: hotkey.ok },
     };
+  }
+
+  function sendState() {
+    if (ready) sendToControl('state', uiState());
   }
 
   function setMuted(muted) {
     settings.update({ muted: Boolean(muted) });
     if (muted) overlay.clearAll();
     tray.update({ muted: Boolean(muted) });
-    sendToControl('state', uiState());
+    sendState();
   }
+
+  function updateSettings(patch = {}) {
+    const clean = {};
+    if (THEMES.includes(patch.theme)) clean.theme = patch.theme;
+    if ('soundsEnabled' in patch) clean.soundsEnabled = Boolean(patch.soundsEnabled);
+    if ('soundVolume' in patch) clean.soundVolume = clamp01(patch.soundVolume, settings.get().soundVolume);
+    if ('videoSound' in patch) clean.videoSound = Boolean(patch.videoSound);
+    const opts = V.normalizeDropOptions(patch, connection.state.limits);
+    if ('opacity' in patch) clean.opacity = opts.opacity;
+    if ('durationMs' in patch) clean.durationMs = opts.durationMs;
+    if ('position' in patch) clean.position = opts.position;
+    settings.update(clean);
+    if ('soundsEnabled' in clean) tray.update({ soundsEnabled: clean.soundsEnabled });
+    sendState();
+    return publicSettings();
+  }
+
+  // ------------------------------------------------------------ rooms/invites
+
+  function handleInvite(link) {
+    const invite = parseInvite(link);
+    if (!invite) {
+      if (ready) sendToControl('notice', { kind: 'error', text: "That invite link doesn't look right." });
+      return;
+    }
+    if (!ready) {
+      pendingInvite = link;
+      return;
+    }
+    showControlWindow();
+    const nickname = V.normalizeNickname(settings.get().nickname);
+    const busy = role === 'host' || connection.state.status !== 'disconnected';
+    if (nickname && !busy) {
+      joinRoom({ nickname, serverUrl: invite.serverUrl, room: invite.room, link: invite.link || link });
+    } else {
+      // Let them pick a nickname (or confirm leaving their current room) first.
+      sendToControl('invite', { link: invite.link || link, room: invite.room });
+    }
+  }
+
+  async function joinRoom({ nickname, serverUrl, room, link }) {
+    if (host.state.status !== 'off') await host.stop();
+    role = 'join';
+    settings.update({ nickname, role: 'join', serverUrl, room, inviteLink: link || '', autoConnect: true });
+    connection.connect({ url: serverUrl, room, nickname });
+  }
+
+  async function leaveRoom() {
+    role = null;
+    settings.update({ autoConnect: false });
+    connection.disconnect();
+    if (host.state.status !== 'off') await host.stop();
+    sendState();
+  }
+
+  async function startHosting({ nickname, room, mode }) {
+    connection.disconnect({ silent: true });
+    role = 'host';
+    settings.update({ nickname, hostRoom: room, hostMode: mode, role: 'host', autoConnect: false });
+    sendState();
+    try {
+      const { localUrl, inviteLink } = await host.start({ room, mode, giphyKey: settings.get().giphyKey });
+      settings.update({ inviteLink });
+      connection.connect({ url: localUrl, room, nickname });
+      return { ok: true, inviteLink };
+    } catch (err) {
+      if (err.message === 'cancelled') return { ok: false, cancelled: true };
+      return { ok: false, error: err.message };
+    }
+  }
+
+  // ------------------------------------------------------------------ hotkey
+
+  function panic() {
+    overlay.clearAll();
+  }
+
+  function registerPanic(accel) {
+    if (!Hotkey.isPlausibleAccelerator(accel)) return false;
+    try {
+      return globalShortcut.register(accel, panic);
+    } catch {
+      return false;
+    }
+  }
+
+  function changeHotkey(accel) {
+    if (!Hotkey.isPlausibleAccelerator(accel)) return { ok: false, error: "That shortcut can't be used. Try something like Ctrl+Shift+X." };
+    if (accel === hotkey.accelerator && hotkey.ok) return { ok: true };
+    const old = hotkey.accelerator;
+    if (hotkey.ok) globalShortcut.unregister(old);
+    if (registerPanic(accel)) {
+      hotkey = { accelerator: accel, ok: true };
+      settings.update({ panicHotkey: accel });
+      tray.update({ hotkeyOk: true, hotkeyLabel: hotkeyLabel() });
+      sendState();
+      return { ok: true };
+    }
+    hotkey.ok = registerPanic(old);
+    sendState();
+    return { ok: false, error: `${hotkeyLabel(accel)} is already used by Windows or another app. Try a different one.` };
+  }
+
+  // ------------------------------------------------------------------- drops
 
   function handleIncomingDrop(msg) {
     const from = msg.from && typeof msg.from.nickname === 'string' ? msg.from.nickname : 'Someone';
-    if (settings.get().muted) {
+    const s = settings.get();
+    if (s.muted) {
       sendToControl('incoming', { from, kind: msg.kind, muted: true, at: Date.now() });
       return;
     }
     const drop = toOverlayDrop(msg, connection.state.limits);
     if (!drop) return;
-    overlay.show({ ...drop, from });
+    overlay.show({ ...drop, from, volume: s.soundsEnabled ? s.soundVolume : 0 });
     sendToControl('incoming', { from, kind: msg.kind, muted: false, at: Date.now() });
   }
 
+  async function checkGiphyKey(key) {
+    const base = GIPHY_BASE_URL || 'https://api.giphy.com/v1/gifs';
+    try {
+      const res = await net.fetch(`${base}/trending?api_key=${encodeURIComponent(key)}&limit=1`, {
+        signal: AbortSignal.timeout(7000),
+      });
+      if (res.status === 401 || res.status === 403) return 'invalid';
+      if (res.ok || res.status === 429) return 'valid';
+      return 'unreachable';
+    } catch {
+      return 'unreachable';
+    }
+  }
+
+  // --------------------------------------------------------------------- IPC
+
   function registerIpc() {
     ipcMain.handle('app:init', () => ({
-      settings: settings.get(),
+      settings: publicSettings(),
       state: uiState(),
       version: app.getVersion(),
+      platform: process.platform,
+      suggestedRoom: settings.get().hostRoom || randomRoomName(),
+      themes: THEMES,
     }));
 
-    ipcMain.handle('conn:connect', (_e, input) => {
-      const url = V.normalizeServerUrl(input && input.serverUrl);
-      if (!url) return { ok: false, error: 'That server address looks wrong. Try something like ws://192.168.1.20:8787' };
-      const room = V.normalizeRoom(input.room);
-      if (!room) return { ok: false, error: 'Room codes are 1–32 letters, numbers, dashes or underscores.' };
+    ipcMain.handle('room:host', (_e, input = {}) => {
       const nickname = V.normalizeNickname(input.nickname);
       if (!nickname) return { ok: false, error: 'Pick a nickname (1–24 characters).' };
-      settings.update({ serverUrl: String(input.serverUrl).trim(), room, nickname, autoConnect: true });
-      connection.connect({ url, room, nickname });
+      const room = V.normalizeRoom(input.room);
+      if (!room) return { ok: false, error: 'Room names are 1–32 letters, numbers, dashes or underscores.' };
+      const mode = input.mode === 'lan' ? 'lan' : 'internet';
+      return startHosting({ nickname, room, mode });
+    });
+
+    ipcMain.handle('room:restart', () => {
+      const s = settings.get();
+      return startHosting({ nickname: s.nickname, room: s.hostRoom, mode: s.hostMode });
+    });
+
+    ipcMain.handle('room:join', async (_e, input = {}) => {
+      const nickname = V.normalizeNickname(input.nickname);
+      if (!nickname) return { ok: false, error: 'Pick a nickname (1–24 characters).' };
+      let target;
+      if (input.invite) {
+        target = parseInvite(input.invite);
+        if (!target) return { ok: false, error: 'Paste the whole invite link your friend sent (it ends in /join/ROOM-NAME).' };
+      } else {
+        const serverUrl = V.normalizeServerUrl(input.serverUrl);
+        if (!serverUrl) return { ok: false, error: 'That server address looks wrong. Try something like ws://192.168.1.20:8787' };
+        const room = V.normalizeRoom(input.room);
+        if (!room) return { ok: false, error: 'Room codes are 1–32 letters, numbers, dashes or underscores.' };
+        target = { serverUrl, room, link: null };
+      }
+      await joinRoom({ nickname, serverUrl: target.serverUrl, room: target.room, link: target.link });
       return { ok: true };
     });
 
-    ipcMain.handle('conn:disconnect', () => {
-      settings.update({ autoConnect: false });
-      connection.disconnect();
+    ipcMain.handle('room:leave', async () => {
+      await leaveRoom();
       return { ok: true };
     });
 
     ipcMain.handle('drop:send', async (_e, payload) => {
       try {
-        const limits = connection.state.limits;
-        const drop = buildOutgoingDrop(payload, limits);
-        const to = payload && typeof payload.to === 'string' ? payload.to : 'all';
+        const drop = buildOutgoingDrop(payload, connection.state.limits);
+        const to = normalizeTarget(payload && payload.to);
         const reply = await connection.request({ type: 'drop', to, ...drop });
         return { ok: true, delivered: reply.delivered };
       } catch (err) {
@@ -249,12 +514,10 @@ function run() {
     ipcMain.handle('drop:preview', (_e, payload) => {
       try {
         const out = buildOutgoingDrop(payload, connection.state.limits);
-        const drop = toOverlayDrop(
-          { ...out, data: out.data, dropId: `preview-${crypto.randomBytes(4).toString('hex')}` },
-          connection.state.limits,
-        );
+        const drop = toOverlayDrop({ ...out, dropId: `preview-${crypto.randomBytes(4).toString('hex')}` }, connection.state.limits);
         if (!drop) return { ok: false, error: 'Could not preview that.' };
-        overlay.show({ ...drop, from: 'Preview (only you can see this)', preview: true });
+        const s = settings.get();
+        overlay.show({ ...drop, from: 'Preview (only you can see this)', preview: true, volume: s.soundsEnabled ? s.soundVolume : 0 });
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err.message };
@@ -264,14 +527,7 @@ function run() {
     ipcMain.handle('gif:search', async (_e, { query, offset } = {}) => gifRequest({ type: 'gif-search', query, offset }));
     ipcMain.handle('gif:trending', async (_e, { offset } = {}) => gifRequest({ type: 'gif-trending', offset }));
 
-    ipcMain.handle('prefs:update', (_e, patch = {}) => {
-      const clean = V.normalizeDropOptions(patch, connection.state.limits);
-      const allowed = {};
-      if ('opacity' in patch) allowed.opacity = clean.opacity;
-      if ('durationMs' in patch) allowed.durationMs = clean.durationMs;
-      if ('position' in patch) allowed.position = clean.position;
-      return settings.update(allowed);
-    });
+    ipcMain.handle('settings:update', (_e, patch) => updateSettings(patch || {}));
 
     ipcMain.handle('mute:set', (_e, muted) => {
       setMuted(Boolean(muted));
@@ -281,6 +537,49 @@ function run() {
     ipcMain.handle('overlay:clear', () => {
       overlay.clearAll();
       return { ok: true };
+    });
+
+    ipcMain.handle('hotkey:set', (_e, accel) => changeHotkey(String(accel || '')));
+    ipcMain.handle('hotkey:reset', () => changeHotkey(Hotkey.DEFAULT_HOTKEY));
+    // While the settings screen is recording a new shortcut, the old one must
+    // not fire (otherwise pressing it again would never reach the recorder).
+    ipcMain.handle('hotkey:pause', (_e, paused) => {
+      if (paused && hotkey.ok) {
+        globalShortcut.unregister(hotkey.accelerator);
+        hotkey.ok = false;
+      } else if (!paused && !hotkey.ok) {
+        hotkey.ok = registerPanic(hotkey.accelerator);
+      }
+      return { ok: true };
+    });
+
+    ipcMain.handle('giphy:save', async (_e, rawKey) => {
+      const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+      if (key && !/^[A-Za-z0-9]{16,64}$/.test(key)) {
+        return { ok: false, error: "That doesn't look like a GIPHY API key. It's a long mix of letters and numbers." };
+      }
+      let warning = null;
+      if (key) {
+        const check = await checkGiphyKey(key);
+        if (check === 'invalid') return { ok: false, error: 'GIPHY says that key is not valid. Check you copied all of it.' };
+        if (check === 'unreachable') warning = "Saved. (GIPHY couldn't be reached to double-check the key.)";
+      }
+      settings.update({ giphyKey: key });
+      settings.flush();
+      host.setGiphyKey(key);
+      sendState();
+      return { ok: true, warning };
+    });
+
+    ipcMain.handle('clipboard:write', (_e, text) => {
+      if (typeof text === 'string' && text.length <= 2000) clipboard.writeText(text);
+      return { ok: true };
+    });
+
+    ipcMain.handle('clipboard:invite', () => {
+      const text = clipboard.readText().slice(0, 2000);
+      const invite = parseInvite(text);
+      return invite ? { link: invite.link || text.trim(), room: invite.room } : null;
     });
 
     ipcMain.handle('open-external', (_e, url) => {
@@ -315,6 +614,24 @@ function run() {
   }
 }
 
+// ---------------------------------------------------------------- helpers
+
+function clamp01(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+}
+
+/** 'all', one friend's id, or a list of ids. */
+function normalizeTarget(to) {
+  if (to === 'all' || to === undefined) return 'all';
+  if (typeof to === 'string') return to;
+  if (Array.isArray(to)) {
+    const ids = [...new Set(to.filter((id) => typeof id === 'string' && id.length <= 64))];
+    return ids.length ? ids : 'all';
+  }
+  return 'all';
+}
+
 /** Screens for the tray's "Show memes on" menu, left to right. */
 function listDisplays() {
   const primaryId = screen.getPrimaryDisplay().id;
@@ -327,24 +644,60 @@ function listDisplays() {
     }));
 }
 
+function asBytes(value) {
+  return value instanceof Uint8Array && value.length > 0 ? value : null;
+}
+
+function toBase64(bytes) {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+}
+
+const KIND_FORMATS = {
+  image: 'Only PNG, JPG, GIF and WebP images are supported.',
+  video: 'Only MP4 and WebM videos are supported.',
+  audio: 'Only MP3, WAV, OGG and M4A sounds are supported.',
+};
+
+function buildSound(sound, limits) {
+  if (!sound) return null;
+  if (sound.type === 'builtin') {
+    if (!V.BUILTIN_SOUNDS.includes(sound.id)) throw new Error('Unknown sound.');
+    return { type: 'builtin', id: sound.id };
+  }
+  if (sound.type === 'file') {
+    const bytes = asBytes(sound.bytes);
+    if (!bytes) throw new Error('Pick a sound file first.');
+    if (bytes.length > limits.maxSoundBytes) {
+      throw new Error(`That sound is ${V.formatBytes(bytes.length)}. The limit is ${V.formatBytes(limits.maxSoundBytes)}.`);
+    }
+    if (V.mediaKind(V.sniffMediaMime(bytes)) !== 'audio') throw new Error(KIND_FORMATS.audio);
+    return { type: 'file', data: toBase64(bytes), name: typeof sound.name === 'string' ? sound.name.slice(0, 60) : '' };
+  }
+  throw new Error('Unknown sound.');
+}
+
 /** Validate what the control window wants to send and shape it for the wire. */
 function buildOutgoingDrop(payload, limits) {
   if (!payload || typeof payload !== 'object') throw new Error('Nothing to send.');
-  const opts = V.normalizeDropOptions(payload, limits);
+  const kind = payload.kind;
+  const opts = V.normalizeDropOptions(payload, limits, { allowFullClip: kind === 'video' || kind === 'sound' });
+  const sound = buildSound(payload.sound, limits);
 
-  if (payload.kind === 'image') {
-    const bytes = payload.bytes;
-    if (!(bytes instanceof Uint8Array) || bytes.length === 0) throw new Error('Pick an image first.');
-    if (bytes.length > limits.maxImageBytes) {
-      throw new Error(`That image is ${V.formatBytes(bytes.length)} — the limit is ${V.formatBytes(limits.maxImageBytes)}.`);
+  if (kind === 'image' || kind === 'video') {
+    const bytes = asBytes(payload.bytes);
+    if (!bytes) throw new Error('Pick a file first.');
+    const max = kind === 'image' ? limits.maxImageBytes : limits.maxVideoBytes;
+    if (bytes.length > max) {
+      throw new Error(`That ${kind} is ${V.formatBytes(bytes.length)}. The limit is ${V.formatBytes(max)}.`);
     }
-    const mime = V.sniffImageMime(bytes);
-    if (!mime) throw new Error('Only PNG, JPG, GIF and WebP images are supported.');
-    const data = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
-    return { kind: 'image', mime, data, ...opts };
+    const mime = V.sniffMediaMime(bytes);
+    if (V.mediaKind(mime) !== kind) throw new Error(KIND_FORMATS[kind]);
+    const out = { kind, mime, data: toBase64(bytes), ...opts, sound };
+    if (kind === 'video') out.videoSound = payload.videoSound !== false;
+    return out;
   }
 
-  if (payload.kind === 'gif') {
+  if (kind === 'gif') {
     if (!V.isGiphyUrl(payload.url)) throw new Error('Only GIPHY GIFs can be sent from the GIF tab.');
     return {
       kind: 'gif',
@@ -353,37 +706,65 @@ function buildOutgoingDrop(payload, limits) {
       height: Number(payload.height) || undefined,
       title: typeof payload.title === 'string' ? payload.title.slice(0, 100) : '',
       ...opts,
+      sound,
     };
   }
 
-  throw new Error('Pick an image or a GIF first.');
+  if (kind === 'sound') {
+    if (!sound) throw new Error('Pick a sound first.');
+    return { kind: 'sound', durationMs: 0, sound };
+  }
+
+  throw new Error('Pick an image, video, GIF or sound first.');
 }
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
-const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+function decodeMediaField(data, expectedKind) {
+  if (typeof data !== 'string' || !BASE64.test(data)) return null;
+  const bytes = Buffer.from(data, 'base64');
+  const mime = V.sniffMediaMime(bytes);
+  if (V.mediaKind(mime) !== expectedKind) return null;
+  return { bytes, mime };
+}
 
 /** Turn a drop from the wire into something safe for the overlay to render. */
 function toOverlayDrop(msg, limits) {
-  const opts = V.normalizeDropOptions(msg, limits);
-  let src;
-  if (msg.kind === 'image') {
-    if (!IMAGE_MIMES.has(msg.mime) || typeof msg.data !== 'string' || !BASE64.test(msg.data)) return null;
-    src = `data:${msg.mime};base64,${msg.data}`;
-  } else if (msg.kind === 'gif') {
-    if (!V.isGiphyUrl(msg.url)) return null; // never load arbitrary URLs from strangers
-    src = msg.url;
-  } else {
-    return null;
-  }
-  return {
+  const kind = msg.kind;
+  const opts = V.normalizeDropOptions(msg, limits, { allowFullClip: kind === 'video' || kind === 'sound' });
+  const drop = {
     id: String(msg.dropId || crypto.randomBytes(4).toString('hex')),
-    kind: msg.kind,
-    src,
+    kind,
     width: Number(msg.width) || undefined,
     height: Number(msg.height) || undefined,
     title: typeof msg.title === 'string' ? msg.title.slice(0, 100) : '',
+    maxClipMs: limits.maxClipMs || 60000,
     ...opts,
+    sound: null,
   };
+
+  if (kind === 'image' || kind === 'video') {
+    const media = decodeMediaField(msg.data, kind);
+    if (!media) return null;
+    drop.bytes = media.bytes;
+    drop.mime = media.mime;
+    if (kind === 'video') drop.videoSound = msg.videoSound !== false;
+  } else if (kind === 'gif') {
+    if (!V.isGiphyUrl(msg.url)) return null; // never load arbitrary URLs from strangers
+    drop.src = msg.url;
+  } else if (kind !== 'sound') {
+    return null;
+  }
+
+  const s = msg.sound;
+  if (s && s.type === 'builtin' && V.BUILTIN_SOUNDS.includes(s.id)) {
+    drop.sound = { type: 'builtin', id: s.id };
+  } else if (s && s.type === 'file') {
+    const audio = decodeMediaField(s.data, 'audio');
+    if (audio) drop.sound = { type: 'file', mime: audio.mime, bytes: audio.bytes, name: typeof s.name === 'string' ? s.name.slice(0, 60) : '' };
+  }
+  if (kind === 'sound' && !drop.sound) return null;
+  return drop;
 }
 
 function openExternalSafely(url) {

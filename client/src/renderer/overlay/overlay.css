@@ -39,7 +39,8 @@ body {
     transform 280ms ease-in;
 }
 
-.drop img {
+.drop img,
+.drop video {
   display: block;
   width: 100%;
   height: 100%;
@@ -47,7 +48,8 @@ body {
   -webkit-user-drag: none;
 }
 
-.drop:not(.drop--fullscreen) img {
+.drop:not(.drop--fullscreen) img,
+.drop:not(.drop--fullscreen) video {
   filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.35));
 }
 
@@ -83,6 +85,31 @@ body {
 
 .drop--preview .tag {
   background: rgba(123, 47, 247, 0.85);
+}
+
+/* Sound-only drops: a pill at the top of the screen. */
+.drop--sound {
+  left: 50%;
+  top: 24px;
+  max-width: min(560px, calc(100% - 48px));
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: rgba(20, 16, 32, 0.86);
+  color: #fff;
+  font: 600 16px/1.35 'Segoe UI', system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  transform: translateX(-50%) translateY(-12px) scale(0.92);
+}
+
+.drop--sound.in {
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.drop--sound.out {
+  transform: translateX(-50%) translateY(-8px) scale(0.96);
 }
 
 /* Remaining-time bar along the bottom of each drop. */
