@@ -6,12 +6,16 @@
   "main": "src/main/main.js",
   "author": "MemeDrop",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bttzren/Memescreen.git"
+  },
   "private": true,
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "dist": "electron-builder --win",
-    "dist:dir": "electron-builder --win --dir"
+    "dist": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win --dir --publish never"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -51,6 +55,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "MemeDrop",
       "runAfterFinish": true
-    }
+    },
+    "publish": null
   }
 }

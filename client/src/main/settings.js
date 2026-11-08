@@ -12,6 +12,7 @@ const DEFAULTS = Object.freeze({
   position: 'random',
   muted: false,
   autoConnect: false,
+  displayId: 'main', // which screen memes appear on
 });
 
 /**

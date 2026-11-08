@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { WebSocket } = require('ws');
 const { startServer } = require('../src/server');
 
@@ -77,12 +79,13 @@ async function connect(port) {
   return client;
 }
 
-// Smallest valid-looking images for each supported format (magic bytes + padding).
+// Real (tiny) images for each supported format, made with Pillow.
+const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name));
 const SAMPLE_IMAGES = {
-  png: Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]),
-  jpeg: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 2)]),
-  gif: Buffer.concat([Buffer.from('GIF89a', 'ascii'), Buffer.alloc(32, 3)]),
-  webp: Buffer.concat([Buffer.from('RIFF', 'ascii'), Buffer.from([0x24, 0, 0, 0]), Buffer.from('WEBPVP8 ', 'ascii'), Buffer.alloc(32, 4)]),
+  png: fixture('tiny.png'),
+  jpeg: fixture('tiny.jpg'),
+  gif: fixture('tiny.gif'),
+  webp: fixture('tiny-lossy.webp'),
 };
 
 /** A fake GIPHY API that counts calls and returns canned results. */
@@ -133,4 +136,4 @@ function makeGif(id) {
   };
 }
 
-module.exports = { startTestServer, connect, SAMPLE_IMAGES, fakeGiphyFetch, makeGif };
+module.exports = { startTestServer, connect, SAMPLE_IMAGES, fixture, fakeGiphyFetch, makeGif };

@@ -106,7 +106,73 @@ function decodeImage(base64, maxBytes) {
   if (buf.length > maxBytes) return { error: `Image is too big (max ${formatBytes(maxBytes)}).` };
   const mime = sniffImageMime(buf);
   if (!mime) return { error: 'Only PNG, JPG, GIF and WebP images are supported.' };
-  return { mime, base64: buf.toString('base64'), bytes: buf.length };
+  // A tiny file can still decode to billions of pixels ("decompression bomb")
+  // and freeze everyone's screen, so check the declared dimensions too.
+  const dims = imageDimensions(buf, mime);
+  if (!dims) return { error: "Couldn't read that image's size — is the file damaged?" };
+  if (dims.width > MAX_IMAGE_SIDE || dims.height > MAX_IMAGE_SIDE || dims.width * dims.height > MAX_IMAGE_PIXELS) {
+    return { error: `That image is ${dims.width}×${dims.height} pixels, which is too large to show.` };
+  }
+  return { mime, base64: buf.toString('base64'), bytes: buf.length, width: dims.width, height: dims.height };
+}
+
+const MAX_IMAGE_SIDE = 16384;
+const MAX_IMAGE_PIXELS = 64 * 1000 * 1000; // fits 48 MP phone photos
+
+/** Read width/height from the image header without decoding it. Returns null if unparseable. */
+function imageDimensions(buf, mime) {
+  try {
+    if (mime === 'image/png') {
+      if (buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+      return dims(buf.readUInt32BE(16), buf.readUInt32BE(20));
+    }
+    if (mime === 'image/gif') {
+      return dims(buf.readUInt16LE(6), buf.readUInt16LE(8));
+    }
+    if (mime === 'image/webp') {
+      const chunk = buf.toString('ascii', 12, 16);
+      if (chunk === 'VP8X') {
+        return dims(buf.readUIntLE(24, 3) + 1, buf.readUIntLE(27, 3) + 1);
+      }
+      if (chunk === 'VP8L') {
+        if (buf[20] !== 0x2f) return null;
+        const bits = buf.readUInt32LE(21);
+        return dims((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
+      }
+      if (chunk === 'VP8 ') {
+        // Frame tag (3 bytes) + start code 9d 01 2a, then 14-bit width/height.
+        if (buf[23] !== 0x9d || buf[24] !== 0x01 || buf[25] !== 0x2a) return null;
+        return dims(buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff);
+      }
+      return null;
+    }
+    if (mime === 'image/jpeg') {
+      let i = 2;
+      while (i + 9 < buf.length) {
+        if (buf[i] !== 0xff) return null;
+        let marker = buf[i + 1];
+        while (marker === 0xff && i + 2 < buf.length) {
+          i += 1; // fill bytes
+          marker = buf[i + 1];
+        }
+        i += 2;
+        if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue; // no length
+        if (marker === 0xd9 || marker === 0xda) return null; // end / start of scan before a frame header
+        const len = buf.readUInt16BE(i);
+        const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+        if (isSof) return dims(buf.readUInt16BE(i + 5), buf.readUInt16BE(i + 3));
+        i += len;
+      }
+      return null;
+    }
+  } catch {
+    return null; // header shorter than it claims
+  }
+  return null;
+}
+
+function dims(width, height) {
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
 function formatBytes(bytes) {
@@ -126,5 +192,6 @@ module.exports = {
   sniffImageMime,
   isGiphyUrl,
   decodeImage,
+  imageDimensions,
   formatBytes,
 };

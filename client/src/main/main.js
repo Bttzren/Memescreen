@@ -10,6 +10,7 @@ const {
   shell,
   Menu,
   powerMonitor,
+  screen,
   session,
 } = require('electron');
 const { Connection } = require('./connection');
@@ -64,7 +65,7 @@ function run() {
     Menu.setApplicationMenu(null);
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
-    overlay = new OverlayManager();
+    overlay = new OverlayManager({ displayId: settings.get().displayId });
     overlay.create(); // warm it up so the first meme appears instantly
 
     tray = createTray({
@@ -72,6 +73,12 @@ function run() {
       onOpen: () => showControlWindow(),
       onToggleMute: () => setMuted(!settings.get().muted),
       onToggleStartup: () => setStartWithOs(!getStartWithOs()),
+      onPickDisplay: (displayId) => {
+        settings.update({ displayId });
+        overlay.setDisplay(displayId);
+        tray.update({ displayId });
+      },
+      getDisplays: listDisplays,
       canStartWithOs: CAN_START_WITH_OS,
       onClear: () => overlay.clearAll(),
       onQuit: () => quit(),
@@ -80,7 +87,16 @@ function run() {
     hotkeyOk = globalShortcut.register(PANIC_HOTKEY, () => overlay.clearAll());
     if (!hotkeyOk) console.warn(`Could not register ${HOTKEY_LABEL} (another app may be using it).`);
 
-    tray.update({ muted: settings.get().muted, hotkeyOk, startWithOs: getStartWithOs() });
+    tray.update({
+      muted: settings.get().muted,
+      hotkeyOk,
+      startWithOs: getStartWithOs(),
+      displayId: settings.get().displayId,
+    });
+    // Keep the "Show memes on" list current when monitors come and go.
+    for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
+      screen.on(event, () => tray.update({}));
+    }
     createControlWindow();
     registerIpc();
 
@@ -297,6 +313,18 @@ function run() {
     app.setLoginItemSettings({ openAtLogin: Boolean(enabled), args: ['--hidden'] });
     tray.update({ startWithOs: getStartWithOs() });
   }
+}
+
+/** Screens for the tray's "Show memes on" menu, left to right. */
+function listDisplays() {
+  const primaryId = screen.getPrimaryDisplay().id;
+  return screen
+    .getAllDisplays()
+    .sort((a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y)
+    .map((d, i) => ({
+      id: String(d.id),
+      label: `Screen ${i + 1} (${d.size.width}×${d.size.height})${d.id === primaryId ? ' · main' : ''}`,
+    }));
 }
 
 /** Validate what the control window wants to send and shape it for the wire. */

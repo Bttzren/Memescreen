@@ -9,13 +9,23 @@ const ASSETS = path.join(__dirname, '..', '..', 'assets');
  * System tray icon: open the window, mute incoming memes, clear the screen,
  * quit. Left-click opens the window (the Windows convention).
  */
-function createTray({ onOpen, onToggleMute, onToggleStartup, onClear, onQuit, hotkeyLabel, canStartWithOs }) {
+function createTray({
+  onOpen,
+  onToggleMute,
+  onToggleStartup,
+  onPickDisplay,
+  getDisplays,
+  onClear,
+  onQuit,
+  hotkeyLabel,
+  canStartWithOs,
+}) {
   const icons = {
     normal: nativeImage.createFromPath(path.join(ASSETS, 'tray.png')),
     muted: nativeImage.createFromPath(path.join(ASSETS, 'tray-muted.png')),
   };
   const tray = new Tray(icons.normal);
-  let current = { muted: false, status: 'disconnected', room: null, hotkeyOk: true, startWithOs: false };
+  let current = { muted: false, status: 'disconnected', room: null, hotkeyOk: true, startWithOs: false, displayId: 'main' };
 
   function render() {
     const statusLine =
@@ -37,6 +47,7 @@ function createTray({ onOpen, onToggleMute, onToggleStartup, onClear, onQuit, ho
           label: current.hotkeyOk ? `Clear screen now (${hotkeyLabel})` : 'Clear screen now',
           click: onClear,
         },
+        ...displayMenu(),
         { type: 'separator' },
         ...(canStartWithOs
           ? [
@@ -51,6 +62,33 @@ function createTray({ onOpen, onToggleMute, onToggleStartup, onClear, onQuit, ho
         { label: 'Quit MemeDrop', click: onQuit },
       ]),
     );
+  }
+
+  // "Show memes on ▸" — only when there's more than one screen.
+  function displayMenu() {
+    const displays = getDisplays();
+    if (displays.length < 2) return [];
+    const known = displays.some((d) => d.id === current.displayId);
+    return [
+      {
+        label: 'Show memes on',
+        submenu: [
+          {
+            label: 'Main screen',
+            type: 'radio',
+            checked: current.displayId === 'main' || !known,
+            click: () => onPickDisplay('main'),
+          },
+          { type: 'separator' },
+          ...displays.map((d) => ({
+            label: d.label,
+            type: 'radio',
+            checked: current.displayId === d.id,
+            click: () => onPickDisplay(d.id),
+          })),
+        ],
+      },
+    ];
   }
 
   tray.on('click', onOpen);

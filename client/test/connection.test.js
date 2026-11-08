@@ -33,7 +33,7 @@ function waitFor(conn, predicate, timeoutMs = 3000) {
   });
 }
 
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]);
+const PNG = require('node:fs').readFileSync(path.join(__dirname, '..', '..', 'server', 'test', 'fixtures', 'tiny.png'));
 
 test('connects, sees friends, sends and receives drops', { skip }, async () => {
   const server = await startServer({ port: 0, host: '127.0.0.1', log: () => {} });

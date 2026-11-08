@@ -8,13 +8,14 @@ const MAX_ON_SCREEN = 6;
 /**
  * The see-through, click-through, always-on-top window that memes appear in.
  *
- * It covers the primary display, ignores the mouse (so you can keep working or
+ * It covers one display (the main one unless picked in the tray), ignores the mouse (so you can keep working or
  * gaming underneath) and is hidden whenever nothing is showing. The panic
  * hotkey hides the window *first* and then clears it, so even if the renderer
  * were stuck, the memes vanish instantly.
  */
 class OverlayManager {
-  constructor() {
+  constructor({ displayId = 'main' } = {}) {
+    this.displayId = displayId; // 'main' or a display id (as a string)
     this.win = null;
     this.ready = false;
     this.queue = [];
@@ -41,7 +42,7 @@ class OverlayManager {
 
   create() {
     if (this.win && !this.win.isDestroyed()) return this.win;
-    const { bounds } = screen.getPrimaryDisplay();
+    const { bounds } = this.targetDisplay();
     this.ready = false;
     this.win = new BrowserWindow({
       ...bounds,
@@ -93,9 +94,34 @@ class OverlayManager {
     return this.win;
   }
 
+  /** The display memes appear on; falls back to the main one if it was unplugged. */
+  targetDisplay() {
+    if (this.displayId !== 'main') {
+      const match = screen.getAllDisplays().find((d) => String(d.id) === this.displayId);
+      if (match) return match;
+    }
+    return screen.getPrimaryDisplay();
+  }
+
+  setDisplay(displayId) {
+    this.displayId = displayId || 'main';
+    this.fitToDisplay();
+  }
+
   fitToDisplay() {
     if (!this.win || this.win.isDestroyed()) return;
-    this.win.setBounds(screen.getPrimaryDisplay().bounds);
+    const { bounds } = this.targetDisplay();
+    const current = this.win.getBounds();
+    if (
+      current.x === bounds.x && current.y === bounds.y &&
+      current.width === bounds.width && current.height === bounds.height
+    ) {
+      return;
+    }
+    // Twice on purpose: moving between monitors with different scaling can
+    // apply the old scale factor on the first call (Windows).
+    this.win.setBounds(bounds);
+    this.win.setBounds(bounds);
   }
 
   /**
