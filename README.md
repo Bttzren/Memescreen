@@ -55,8 +55,8 @@ Give your friends the address that works for them:
 | --- | --- |
 | **Same Wi-Fi / LAN** | Use the `Network:` address, e.g. `ws://192.168.1.20:8787`. Allow Node through Windows Firewall when it asks. |
 | **Anywhere, easiest** | Install [Tailscale](https://tailscale.com/) on everyone's PC and use your Tailscale IP: `ws://100.x.y.z:8787`. |
-| **Anywhere, quick tunnel** | Run `cloudflared tunnel --url http://localhost:8787` ([cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)). It prints an `https://….trycloudflare.com` address; friends type it in as **`wss://….trycloudflare.com`**. The address changes every time you restart the tunnel. |
-| **Anywhere, always on** | Host `server/` on any Node host that supports WebSockets (Render, Railway, Fly.io, a small VPS…). Set the root directory to `server`, the start command to `npm start`, and add `GIPHY_API_KEY` in the host's environment settings. Friends use `wss://your-app.example.com`. Free tiers often go to sleep when idle, so the first connection can take a few seconds. |
+| **Anywhere, quick tunnel** | Run `cloudflared tunnel --url http://localhost:8787` ([cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)). It prints an `https://….trycloudflare.com` address that friends can paste in as-is (the app turns `https://` into `wss://`). The address changes every time you restart the tunnel. |
+| **Anywhere, always on** | Host `server/` on any Node host that supports WebSockets (Render, Railway, Fly.io, a small VPS…). Set the root directory to `server`, the start command to `npm start`, and add `GIPHY_API_KEY` in the host's environment settings. Friends use `https://your-app.example.com` (or `wss://…`, same thing). Free tiers often go to sleep when idle, so the first connection can take a few seconds. |
 | **Port forwarding** | Forward TCP port 8787 on your router to the PC running the server and share `ws://your-public-ip:8787`. |
 
 The client is forgiving about the format. `192.168.1.20:8787`, `http://…` and `https://…` are all converted to the right `ws://` or `wss://` address.
@@ -185,7 +185,7 @@ This is built for a small group of friends, so there are no accounts and no heav
 - **The overlay shows up as a black box instead of see-through.** Some graphics drivers don't like transparent windows. Start MemeDrop with GPU acceleration off: right-click the shortcut, choose **Properties**, and add ` --no-gpu` to the end of **Target**.
 - **Memes don't appear over my game.** Games in *exclusive* fullscreen draw over everything. Switch the game to **borderless windowed** (sometimes called "fullscreen windowed").
 - **Ctrl+Shift+X doesn't do anything.** Another app has claimed that shortcut, and MemeDrop shows a yellow banner when this happens. The 🗑 button and the tray's **Clear screen now** always work. Also note that while MemeDrop runs, it takes Ctrl+Shift+X from other apps (e.g. VS Code's Extensions shortcut).
-- **"Can't reach the server."** Check the server is running, the address and port are right, and the server PC's firewall allows Node. Hosted or tunnel addresses need `wss://`, not `ws://`.
+- **"Can't reach the server."** Check the server is running, the address and port are right, and the server PC's firewall allows Node. Hosted or tunnel addresses need `https://` or `wss://`, not `ws://`.
 - **"That address isn't a MemeDrop server."** You're probably pointing at a web page rather than the relay. Check the port, and use `wss://` for HTTPS hosts.
 - **"GIF search isn't set up on this server."** The server has no `GIPHY_API_KEY`. See section 2.
 - **"GIF search is resting."** You've hit GIPHY's hourly limit on a beta key. Wait a bit, or get a production key.
