@@ -272,7 +272,7 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
       to: msg.to === 'all' ? 'all' : msg.to,
       delivered,
     });
-    log('info', `${client.nickname} dropped a ${outgoing.kind} on ${msg.to === 'all' ? 'everyone' : recipients[0].nickname} in ${client.room} (${delivered} delivered)`);
+    log('info', `${client.nickname} dropped ${outgoing.kind === 'gif' ? 'a GIF' : 'an image'} on ${msg.to === 'all' ? 'everyone' : recipients[0].nickname} in ${client.room} (${delivered} delivered)`);
     return undefined;
   }
 
