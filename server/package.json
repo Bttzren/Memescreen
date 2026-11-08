@@ -1,6 +1,6 @@
 {
   "name": "memedrop-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Tiny WebSocket relay for MemeDrop: passes memes between friends in the same room and proxies GIPHY search.",
   "main": "src/index.js",

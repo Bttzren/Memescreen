@@ -22,7 +22,7 @@ One friend clicks **Host a room** and sends everyone the invite link. Everyone e
 
 Download the installer, run it, and MemeDrop opens. There's no admin password and nothing to set up.
 
-- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
+- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup 1.1.0.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
 - **"Windows protected your PC"?** The installer isn't code-signed, because certificates cost money. Click **More info → Run anyway**.
 
 ### 2. One person hosts
