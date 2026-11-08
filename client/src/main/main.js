@@ -571,13 +571,14 @@ function run() {
       return { ok: true, warning };
     });
 
-    ipcMain.handle('clipboard:write', (_e, text) => {
-      if (typeof text === 'string' && text.length <= 2000) clipboard.writeText(text);
+    // (await: newer Electron versions make the clipboard API async)
+    ipcMain.handle('clipboard:write', async (_e, text) => {
+      if (typeof text === 'string' && text.length <= 2000) await clipboard.writeText(text);
       return { ok: true };
     });
 
-    ipcMain.handle('clipboard:invite', () => {
-      const text = clipboard.readText().slice(0, 2000);
+    ipcMain.handle('clipboard:invite', async () => {
+      const text = String((await clipboard.readText()) || '').slice(0, 2000);
       const invite = parseInvite(text);
       return invite ? { link: invite.link || text.trim(), room: invite.room } : null;
     });

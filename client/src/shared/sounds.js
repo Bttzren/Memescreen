@@ -288,6 +288,20 @@
     },
   };
 
+  // Per-sound level so they all sound about equally loud (measured RMS ≈ 0.1).
+  const LEVEL = {
+    airhorn: 0.3,
+    boing: 1,
+    ding: 1.2,
+    drumroll: 0.55,
+    'sad-trombone': 0.85,
+    whoosh: 1.7,
+    tada: 1,
+    siren: 0.7,
+    toot: 0.6,
+    pop: 1.1,
+  };
+
   function info(id) {
     return SOUNDS.find((s) => s.id === id) || null;
   }
@@ -299,9 +313,17 @@
   function play(ctx, id, destination, { volume = 1, when = 0 } = {}) {
     const recipe = RECIPES[id];
     if (!recipe) return null;
+    // recipe → level → volume → limiter → speakers (the limiter stops any clipping)
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.1;
+    limiter.connect(destination || ctx.destination);
     const master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, volume));
-    master.connect(destination || ctx.destination);
+    master.gain.value = Math.max(0, Math.min(1, volume)) * (LEVEL[id] || 1);
+    master.connect(limiter);
     const k = kit(ctx, master);
     const t = Math.max(ctx.currentTime, when) + 0.02;
     const duration = recipe(k, t);
@@ -314,6 +336,7 @@
         k.stopAll();
         try {
           master.disconnect();
+          limiter.disconnect();
         } catch {
           /* already disconnected */
         }

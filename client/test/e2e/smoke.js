@@ -29,6 +29,8 @@ const CLIENT = path.join(__dirname, '..', '..');
 const ROOT = path.join(CLIENT, '..');
 const OUT = path.join(CLIENT, 'dist', 'smoke');
 const SMOKE_PNG = path.join(CLIENT, 'test', 'fixtures', 'smoke.png'); // 400×300, magenta centre
+const SMOKE_VIDEO = path.join(ROOT, 'server', 'test', 'fixtures', 'tiny.webm');
+const FAKE_TUNNEL = path.join(CLIENT, 'test', 'fixtures', 'fake-cloudflared.js');
 const MAGENTA = [255, 0, 255];
 const TEAL = [0x20, 0x80, 0xa0]; // backdrop window colour
 
@@ -157,7 +159,7 @@ async function main() {
     executablePath: exe || require('electron'),
     args,
     cwd: CLIENT,
-    env: { ...process.env, MEMEDROP_USER_DATA: userData },
+    env: { ...process.env, MEMEDROP_USER_DATA: userData, MEMEDROP_TUNNEL_BIN: FAKE_TUNNEL },
     timeout: 60000,
   });
   app.process().stderr.on('data', (d) => {
@@ -168,13 +170,18 @@ async function main() {
   let bob;
   try {
     const control = await getWindow(app, 'control/index.html');
-    await control.waitForSelector('#connect-view:not([hidden])');
-    log('connect screen up');
+    await control.waitForSelector('#welcome-view:not([hidden])');
+    log('welcome screen up');
 
+    // Join a separately running relay via "Join a room" → server address.
+    await control.click('#go-join');
+    await control.evaluate(() => {
+      document.getElementById('join-advanced').open = true;
+    });
+    await control.fill('#join-nickname', 'Alice');
     await control.fill('#server-url', `ws://127.0.0.1:${server.port}`);
     await control.fill('#room', 'smoke');
-    await control.fill('#nickname', 'Alice');
-    await control.click('#connect-btn');
+    await control.click('#join-btn');
     await control.waitForFunction(() => document.getElementById('status-dot').dataset.status === 'connected');
     log('joined room SMOKE');
 
@@ -279,6 +286,52 @@ async function main() {
     await overlay.waitForSelector('.drop.in', { timeout: 10000 });
     await waitFor(async () => (await overlayState(app)).visible === false, 'overlay hides after the drop expires', 6000);
     log('PASS: drop expired and the overlay hid itself');
+
+    // Sound-only drop: shows a small pill and goes away when the sound ends.
+    bob.send({ type: 'drop', to: 'all', kind: 'sound', sound: { type: 'builtin', id: 'pop' } });
+    await overlay.waitForSelector('.drop--sound.in', { timeout: 10000 });
+    await waitFor(async () => (await overlayState(app)).visible === false, 'sound pill goes away', 8000);
+    log('PASS: sound-only drop');
+
+    // Video drop plays.
+    bob.send({ type: 'drop', to: 'all', kind: 'video', data: fs.readFileSync(SMOKE_VIDEO).toString('base64'), durationMs: 3000, position: 'center' });
+    await overlay.waitForSelector('.drop.in video', { timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 600));
+    const video = await overlay.evaluate(() => {
+      const v = document.querySelector('.drop video');
+      return { playing: !v.paused && v.currentTime > 0, width: v.videoWidth };
+    });
+    log(`video: ${JSON.stringify(video)}`);
+    assert.equal(video.playing, true, 'video plays');
+    await control.evaluate(() => window.memedrop.clearScreen());
+    log('PASS: video drop plays');
+
+    // Host a room inside the app ("Friends anywhere", with a stand-in tunnel helper).
+    await control.evaluate(() => window.memedrop.leaveRoom());
+    await control.waitForSelector('#welcome-view:not([hidden])');
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const w of BrowserWindow.getAllWindows()) if (w.webContents.getURL().includes('control')) w.show();
+    });
+    await control.click('#go-host');
+    await control.fill('#host-nickname', 'Alice');
+    await control.fill('#host-room', 'SMOKE-HOST');
+    await control.check('input[name="host-mode"][value="internet"]');
+    await control.click('#host-start');
+    await control.waitForFunction(() => document.getElementById('status-dot').dataset.status === 'connected', null, { timeout: 30000 });
+    let invite = '';
+    await waitFor(async () => {
+      invite = await app.evaluate(async ({ clipboard }) => clipboard.readText());
+      return invite.includes('/join/');
+    }, 'invite link copied to the clipboard', 5000);
+    log(`hosting; invite link: ${invite}`);
+    assert.equal(invite, 'https://silly-test-words-here.trycloudflare.com/join/SMOKE-HOST');
+    const guest = await friend(8787, 'SMOKE-HOST', 'Guest');
+    await control.waitForSelector('.chip:has-text("Guest")');
+    guest.send({ type: 'drop', to: 'all', kind: 'image', data, opacity: 1, durationMs: 3000, position: 'random' });
+    await overlay.waitForSelector('.drop.in', { timeout: 10000 });
+    assert.equal(await overlay.$eval('.drop .tag', (t) => t.textContent), 'Guest');
+    guest.ws.terminate();
+    log('PASS: hosting inside the app works');
 
     log('ALL GOOD');
   } finally {

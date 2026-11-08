@@ -1674,6 +1674,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .switch:checked::after {
   transform: translateX(18px);
+  background: var(--on-accent);
 }
 
 .about {
@@ -1771,4 +1772,12 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .sample .s-a2 {
   background: var(--a2);
+}
+
+.control-row label.check {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--text-2);
 }
