@@ -48,6 +48,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Electron + electron-builder downloads (big, occasionally flaky): cache them.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-win-${{ hashFiles('client/package-lock.json') }}
       - name: Install
         run: |
           npm ci --prefix server
@@ -59,7 +66,11 @@ jobs:
         working-directory: client
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run dist
+        # Retry once: downloads from GitHub occasionally time out (504).
+        run: |
+          npm run dist
+          if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 20; npm run dist }
+          if ($LASTEXITCODE -ne 0) { exit 1 }
       - uses: actions/upload-artifact@v4
         with:
           name: MemeDrop-Windows-Installer

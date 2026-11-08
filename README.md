@@ -1,35 +1,126 @@
 # MemeDrop
 
-Send memes and GIFs straight onto your friends' screens.
+Drop memes, GIFs, videos and sounds straight onto your friends' screens.
 
-Everyone installs the app and joins the same **room code**. Pick a friend (or everyone), drop in an image or search for a GIF, and it pops up on their screen for a few seconds over whatever they're doing, then disappears. The sender chooses how see-through it is, how long it stays, and where it lands.
+One friend clicks **Host a room** and sends everyone the invite link. Everyone else clicks it (or pastes it into MemeDrop) and they're in. Pick a friend, a few friends, or everyone, then drop an image, video, GIF or sound. It pops up on their screen over whatever they're doing, then disappears.
+
+**No terminal, no config files, no accounts.** Everything is done by clicking in the app.
 
 <p align="center">
-  <img src="docs/app.png" alt="The MemeDrop window: join screen and the send screen with an image ready to drop" width="640">
+  <img src="docs/app.png" alt="MemeDrop: the welcome screen, sending a GIF with a sound to two friends, and the soundboard" width="760">
 </p>
 <p align="center">
-  <img src="docs/overlay.png" alt="A meme dropped on someone's screen at 85% opacity, with the sender's name in the corner" width="640">
-  <br><sub>What your friend sees: the meme floats over their apps and their mouse clicks pass straight through it.</sub>
+  <img src="docs/overlay.png" alt="A meme dropped on someone's screen, floating over their apps with the sender's name in the corner" width="640">
+  <br><sub>What your friend sees: the meme floats over their apps, and their mouse clicks pass straight through it.</sub>
 </p>
-
-```
- ┌──────────────┐        ┌───────────────────────┐        ┌──────────────┐
- │ You          │  ws    │  Relay server (Node)  │  ws    │ Friend       │
- │ (Electron)   │ ─────► │  rooms · limits ·     │ ─────► │ meme pops up │
- │              │ ◄───── │  GIPHY search proxy   │ ◄───── │ on screen    │
- └──────────────┘        └───────────────────────┘        └──────────────┘
-```
-
-- **`server/`**: a tiny Node.js WebSocket relay. It keeps track of who's in which room, passes drops along, enforces the limits, and proxies GIPHY search so only the server needs an API key.
-- **`client/`**: the Windows desktop app (Electron). It has a small window for connecting and sending, a tray icon, and a transparent, click-through overlay where memes appear.
-
-There are no accounts. Anyone who knows the server address and your room code can join, so pick a room code that's hard to guess.
 
 ---
 
-## 1. Run the server
+## Get started
 
-You need **Node.js 20.12 or newer** ([download](https://nodejs.org/), the LTS version is fine).
+### 1. Install
+
+Download the installer, run it, and MemeDrop opens. There's no admin password and nothing to set up.
+
+- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
+- **"Windows protected your PC"?** The installer isn't code-signed, because certificates cost money. Click **More info → Run anyway**.
+
+### 2. One person hosts
+
+1. Click **Host a room**.
+2. Type your nickname. A fun room name is already filled in; click 🎲 for another.
+3. Choose who can join:
+   - **Friends anywhere**: works over the internet. The first time, MemeDrop downloads a small free helper from Cloudflare (about 30 seconds) so friends can reach you without any router settings.
+   - **Only people on my Wi-Fi**: same house or network. If Windows asks about the firewall, click **Allow access**.
+4. Click **Start room**. The invite link is copied for you, so paste it to your friends.
+
+The host's MemeDrop needs to stay open (closing the window keeps it running in the tray). If the host quits, the room closes.
+
+### 3. Everyone else joins
+
+- **Click the invite link.** It opens a page with an **Open in MemeDrop** button.
+- **Or paste it:** open MemeDrop → **Join a room**. If you've just copied the link, a **Use the invite you copied** button appears; click it, type your nickname, and **Join room**.
+
+Anyone in the room can click **Invite** (top bar) to copy the link and bring more people.
+
+---
+
+## Sending stuff
+
+1. **Send to:** **Everyone**, one friend, or click several friends to pick a group.
+2. Pick what to drop:
+   - **📁 Upload**: drop an image or video on the box, click to browse, or press **Ctrl+V** to paste a screenshot. Images: PNG, JPG, GIF, WebP up to 5 MB. Videos: MP4 or WebM up to 20 MB.
+   - **🔍 GIFs**: trending GIFs and search, powered by GIPHY. Click to select; double-click to send instantly.
+   - **🔊 Sounds**: a soundboard (air horn, sad trombone, drum roll, ta-da…), or **upload your own** MP3/WAV/OGG/M4A. Click to hear it, double-click to send it straight away.
+3. Adjust:
+   - **Opacity**: from faint (10%) to fully solid (100%).
+   - **Duration**: 1–15 seconds. For videos you can tick **Play the whole clip** instead (up to 60 seconds).
+   - **Position**: **Random** (somewhere random, slightly tilted), **Center**, or **Full screen**.
+   - **Sound**: add a sound effect to any image or GIF. Videos can also play their own sound.
+4. **Preview on me** shows it on your own screen first. **Drop it!** (or **Ctrl+Enter**) sends it.
+
+## Getting memes
+
+Drops pop up with the sender's name in the corner, then fade away. They never steal focus or block your mouse, so you can keep typing, clicking or gaming.
+
+| | |
+| --- | --- |
+| **Panic key** (Ctrl+Shift+X by default) | Instantly clears everything on your screen and **stops all sounds**, from any app. |
+| ⚙️ **Settings → Panic button → Change** | Press any shortcut you like (e.g. Ctrl+Alt+P, or F9). MemeDrop tells you if another app already uses it. |
+| 🔔 button | Mute everything friends send. |
+| ⚙️ **Settings → Sounds** | Turn friends' sounds off or set the volume. |
+| ⚙️ **Settings → Colors** | Six color themes: Bubblegum, Ocean, Lime, Sunset, Midnight, Light. |
+| Tray icon (by the clock) | Right-click for Mute, Play sounds, Clear screen, **Show memes on** (pick a monitor), **Start with Windows**, and Quit. |
+
+<p align="center">
+  <img src="docs/themes.png" alt="MemeDrop in the Ocean, Lime and Light themes, and the Settings panel" width="760">
+</p>
+
+Closing the window just hides MemeDrop in the tray. Right-click the tray icon → **Quit MemeDrop** to really quit.
+
+---
+
+## GIF search (one-time, host only)
+
+GIF search uses GIPHY, which needs a free key. **Only the host needs one**, and everyone in the host's room gets GIF search automatically.
+
+1. In MemeDrop, open the **GIFs** tab (or ⚙️ **Settings → GIF search**) and click **Get a free GIPHY key**.
+2. Sign up, click **Create an App**, choose **API**, and give it any name.
+3. Copy the key, paste it into MemeDrop and click **Save key**. GIF search switches on for the whole room immediately.
+
+Your key stays on your PC (encrypted by Windows) and is never sent to your friends. GIPHY's free keys allow about 100 searches an hour; MemeDrop caches results so a group of friends stays well under that.
+
+As GIPHY requires, the GIFs tab shows **Powered by GIPHY** and GIFs on screen are labelled **via GIPHY**. GIF files aren't relayed: only the GIPHY link is sent, and each friend's app loads it from GIPHY directly.
+
+---
+
+## Troubleshooting
+
+- **The overlay is a black box instead of see-through.** Some graphics drivers don't like transparent windows. Right-click the MemeDrop shortcut → **Properties** → add ` --no-gpu` to the end of **Target**.
+- **Memes don't show over my game.** Games in *exclusive* fullscreen draw over everything. Switch the game to **borderless windowed** (sometimes called "fullscreen windowed").
+- **"Ctrl+Shift+X is taken by another app."** Pick a different panic key in ⚙️ Settings. While MemeDrop runs, your panic key belongs to MemeDrop (e.g. Ctrl+Shift+X normally opens VS Code's Extensions panel).
+- **Friends can't connect ("Friends anywhere").** Click **Restart room** if MemeDrop says the connection dropped, then send the new invite link. Some school or work networks block Cloudflare tunnels; try **Only people on my Wi-Fi** if you're on the same network.
+- **Friends can't connect ("Only my Wi-Fi").** Make sure everyone's on the same network, and that you clicked **Allow access** when Windows asked. If you missed it: Windows Security → Firewall → *Allow an app through firewall* → tick MemeDrop.
+- **No sound.** Check ⚙️ Settings → Sounds is on and the volume isn't at 0, and that the sender didn't untick **Play its sound** on their video.
+- **GIF search says it's off.** The host needs to add a GIPHY key (see above).
+
+---
+
+## Limits and safety
+
+There are no accounts, so anyone with the invite link can join. Only share it with friends.
+
+- **Files are checked by their contents**, not their names. Images bigger than 16384 px on a side or 64 megapixels are refused, so a tiny "image bomb" can't freeze anyone's PC.
+- **Sizes:** images 5 MB, videos 20 MB, uploaded sounds 3 MB. Whole-clip videos and sounds stop after 60 s.
+- **GIFs** can only come from GIPHY, and the overlay window is locked down so it can't load anything else.
+- **Spam limits:** about 8 drops per 10 seconds per person, 20 GIF searches a minute, 30 people per room, and at most 6 things on screen at once.
+- **The app itself:** its pages run sandboxed without Node access, can't open pop-ups or navigate away, and camera/microphone/other permission requests are always denied.
+
+---
+
+## Advanced: run a standalone server
+
+You don't need this, because hosting inside the app covers normal use. It's for an always-on room that doesn't depend on someone's PC being on.
 
 ```bash
 cd server
@@ -38,197 +129,45 @@ cp .env.example .env      # Windows: copy .env.example .env
 npm start
 ```
 
-You'll see something like:
+This needs **Node.js 20.12+**. Put a GIPHY key in `server/.env` (`GIPHY_API_KEY=…`) to enable GIF search; `.env` is gitignored. It works on any Node host with WebSockets (Render, Railway, Fly.io, a VPS…).
 
-```
-  MemeDrop relay is running!
+Friends join with **Join a room → No link? Connect with a server address**, or with an invite link of the form `https://your-server/join/ROOM`.
 
-  Local:    ws://localhost:8787
-  Network:  ws://192.168.1.20:8787
-
-  GIF search: off — set GIPHY_API_KEY in server/.env to turn it on
-```
-
-Give your friends the address that works for them:
-
-| Where are your friends? | What to do |
-| --- | --- |
-| **Same Wi-Fi / LAN** | Use the `Network:` address, e.g. `ws://192.168.1.20:8787`. Allow Node through Windows Firewall when it asks. |
-| **Anywhere, easiest** | Install [Tailscale](https://tailscale.com/) on everyone's PC and use your Tailscale IP: `ws://100.x.y.z:8787`. |
-| **Anywhere, quick tunnel** | Run `cloudflared tunnel --url http://localhost:8787` ([cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)). It prints an `https://….trycloudflare.com` address that friends can paste in as-is (the app turns `https://` into `wss://`). The address changes every time you restart the tunnel. |
-| **Anywhere, always on** | Host `server/` on any Node host that supports WebSockets (Render, Railway, Fly.io, a small VPS…). Set the root directory to `server`, the start command to `npm start`, and add `GIPHY_API_KEY` in the host's environment settings. Friends use `https://your-app.example.com` (or `wss://…`, same thing). Free tiers often go to sleep when idle, so the first connection can take a few seconds. |
-| **Port forwarding** | Forward TCP port 8787 on your router to the PC running the server and share `ws://your-public-ip:8787`. |
-
-The client is forgiving about the format. `192.168.1.20:8787`, `http://…` and `https://…` are all converted to the right `ws://` or `wss://` address.
-
-### Server settings (`server/.env`)
-
-| Variable | Default | What it does |
+| Setting (`server/.env`) | Default | |
 | --- | --- | --- |
-| `GIPHY_API_KEY` | *(empty)* | Turns on GIF search. See below. |
-| `PORT` | `8787` | Port for both HTTP and WebSocket. Most hosts set this for you. |
-| `HOST` | `0.0.0.0` | Interface to listen on. |
-| `MAX_IMAGE_MB` | `5` | Biggest image someone can upload. |
-| `MAX_ROOM_SIZE` | `30` | Max people per room. |
-| `GIPHY_RATING` | `pg-13` | GIPHY content rating: `g`, `pg`, `pg-13` or `r`. |
-| `GIPHY_LANG` | `en` | Search language. |
-| `GIPHY_CACHE_SECONDS` | `300` | How long search results are cached. Trending is cached for at least 10 minutes. |
-
-Real environment variables take priority over `.env`. A health check lives at `GET /health`.
-
----
-
-## 2. Turn on GIF search (GIPHY)
-
-1. Sign in at **[developers.giphy.com](https://developers.giphy.com/dashboard/)**, click **Create an App**, choose **API**, and copy the API key.
-2. Put it in `server/.env`:
-   ```
-   GIPHY_API_KEY=your-key-here
-   ```
-3. Restart the server. It should now say `GIF search: on`.
-
-How it works:
-
-- **The key stays on the server.** Friends' apps ask the relay for search results over their existing connection, and only people who have joined a room can search. The key never goes to clients and is never written to logs.
-- **`.env` is gitignored**, so you can't commit your key by accident. Only `.env.example` is in the repo.
-- **GIFs aren't relayed as files.** When you send a GIF, only its GIPHY link goes through the server, and your friend's app loads it from GIPHY itself. Both the server and the app refuse links that aren't `https://…giphy.com`.
-- **Results are cached briefly** and identical searches that arrive at the same moment share one request. New GIPHY keys start as *beta* keys, limited to roughly 100 requests per hour. Caching keeps a small group well under that. If you do hit the limit, the app says "GIF search is resting" and it recovers on its own. You can apply for a production key from the GIPHY dashboard.
-- **Attribution**: the Search GIFs tab shows "Powered by GIPHY" (it links to giphy.com), and GIFs on screen are tagged "via GIPHY", per GIPHY's attribution rules (see the [GIPHY developer docs](https://developers.giphy.com/docs/api/)). If you apply for a production key, GIPHY may ask you to use their official logo artwork. Swap it into the `.giphy-attribution` element in `client/src/renderer/control/index.html`.
-
----
-
-## 3. Install the app (Windows)
-
-### Option A: download a ready-made installer
-
-Every push that changes the app builds a Windows installer with GitHub Actions:
-
-1. Open the repo on GitHub, then **Actions**, then **CI**, then the latest green run.
-2. Under **Artifacts**, download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup x.y.z.exe` inside).
-3. Share the `.exe` with your friends (Discord, Google Drive, whatever).
-
-You can also start a fresh build any time with **Run workflow** on the CI page.
-
-### Option B: build the installer yourself
-
-On a Windows PC with Node.js installed:
-
-```bash
-cd client
-npm install
-npm run dist
-```
-
-The installer ends up at `client/dist/MemeDrop Setup 1.0.0.exe`.
-
-### Installing
-
-Double-click the installer. It installs for the current user (no admin rights needed), adds Start Menu and desktop shortcuts, and launches MemeDrop.
-
-> **"Windows protected your PC"?** The installer isn't code-signed, because certificates cost money. Click **More info → Run anyway**.
-
-### Option C: run from source (any OS, for tinkering)
-
-```bash
-cd client
-npm install
-npm start
-```
-
----
-
-## 4. Using MemeDrop
-
-**Joining:** enter the server address, a room code (letters, numbers, `-` and `_`, not case-sensitive) and a nickname, then click **Join room**. MemeDrop remembers these and reconnects automatically next time, including after Wi-Fi drops or sleep.
-
-**Sending:**
-
-1. **Send to**: pick **Everyone** or one friend.
-2. **Upload** tab: drop an image onto the box, click to browse, or just **Ctrl+V** to paste a screenshot or copied image. Supports PNG, JPG, GIF and WebP, up to 5 MB.
-   **Search GIFs** tab: browse trending, search, and click a GIF to select it. Double-clicking a GIF sends it immediately.
-3. Set the **opacity** (10% faint to 100% fully solid), **duration** (1–15 seconds) and **position**:
-   - **Random**: medium-sized, somewhere random, with a slight tilt
-   - **Center**: up to 60% of the screen, dead center
-   - **Full screen**: as big as the screen allows, with the whole image visible
-4. Use **Preview on me** to see it on your own screen first, then **Drop it!** (or **Ctrl+Enter**).
-
-**Receiving:** the meme pops up on your screen with the sender's name in the corner, then fades out. It never takes focus or blocks the mouse, so you can keep typing, clicking or gaming underneath. At most 6 are shown at once.
-
-**Staying in control:**
-
-| | |
-| --- | --- |
-| **Ctrl+Shift+X** | **Panic button.** Instantly clears everything on your screen, from any app. |
-| 🔔 button / tray → **Mute incoming memes** | Hide everything friends send until you unmute. You'll still see "X sent a meme" in the window. |
-| 🗑 button / tray → **Clear screen now** | Same as the panic hotkey. |
-| Tray → **Show memes on** | Choose which monitor memes appear on (only shown if you have more than one). |
-| Tray → **Start with Windows** | Launch quietly into the tray when you log in. |
-| Tray → **Quit MemeDrop** | Closing the window only hides it to the tray. Use this to actually quit. |
-
----
-
-## Limits and safety
-
-This is built for a small group of friends, so there are no accounts and no heavy security. It still won't let anyone wreck your PC:
-
-- **Images**: max 5 MB, PNG, JPG, GIF or WebP only. The file type is checked from the file's contents, not its name. Images bigger than 16384 px on a side or 64 megapixels are refused, so a tiny "image bomb" can't freeze anyone's screen.
-- **GIFs**: only `https://…giphy.com` links can be sent, and the overlay window is locked down (Content-Security-Policy) so it can't load anything else.
-- **Spam**: about 8 drops per 10 seconds per person, 20 GIF searches per minute, 30 people per room.
-- **Duration and opacity** are clamped to 1–15 s and 10–100% by the server, whatever the sender's app says.
-- **The app itself**: its pages run sandboxed with no Node access, can't navigate anywhere or open pop-ups, and every permission request (camera, mic…) is denied.
-- **Traffic** is plain `ws://` unless your server sits behind HTTPS (`wss://`). That's fine on a LAN or Tailscale. Use a host or tunnel with HTTPS if you'd rather not send memes unencrypted over the internet.
-
----
-
-## Troubleshooting
-
-- **The overlay shows up as a black box instead of see-through.** Some graphics drivers don't like transparent windows. Start MemeDrop with GPU acceleration off: right-click the shortcut, choose **Properties**, and add ` --no-gpu` to the end of **Target**.
-- **Memes don't appear over my game.** Games in *exclusive* fullscreen draw over everything. Switch the game to **borderless windowed** (sometimes called "fullscreen windowed").
-- **Ctrl+Shift+X doesn't do anything.** Another app has claimed that shortcut, and MemeDrop shows a yellow banner when this happens. The 🗑 button and the tray's **Clear screen now** always work. Also note that while MemeDrop runs, it takes Ctrl+Shift+X from other apps (e.g. VS Code's Extensions shortcut).
-- **"Can't reach the server."** Check the server is running, the address and port are right, and the server PC's firewall allows Node. Hosted or tunnel addresses need `https://` or `wss://`, not `ws://`.
-- **"That address isn't a MemeDrop server."** You're probably pointing at a web page rather than the relay. Check the port, and use `wss://` for HTTPS hosts.
-- **"GIF search isn't set up on this server."** The server has no `GIPHY_API_KEY`. See section 2.
-- **"GIF search is resting."** You've hit GIPHY's hourly limit on a beta key. Wait a bit, or get a production key.
+| `GIPHY_API_KEY` | *(empty)* | Turns on GIF search |
+| `PORT` / `HOST` | `8787` / `0.0.0.0` | Where to listen (HTTP + WebSocket share the port) |
+| `MAX_IMAGE_MB` / `MAX_VIDEO_MB` / `MAX_SOUND_MB` | `5` / `20` / `3` | Upload size caps |
+| `MAX_ROOM_SIZE` | `30` | People per room |
+| `GIPHY_RATING` / `GIPHY_LANG` | `pg-13` / `en` | GIF content rating and search language |
+| `GIPHY_CACHE_SECONDS` | `300` | How long search results are cached |
 
 ---
 
 ## Development
 
 ```
-server/
-  src/index.js       entry point: loads .env, starts the server
-  src/server.js      HTTP (health check) + WebSocket server
-  src/relay.js       rooms, roster, drops, limits, wire protocol
-  src/giphy.js       GIPHY search/trending proxy with cache
-  src/validate.js    input checks, image sniffing, URL allow-list
-  test/              node:test suites (real sockets + a fake GIPHY)
-client/
-  src/main/          Electron main process: app, connection, overlay, tray, settings
-  src/preload/       the only bridge between pages and the main process
-  src/renderer/      control window (UI) and overlay window
-  src/shared/        validation + overlay layout (unit tested)
-  assets/            icons (regenerate with scripts/make-icons.py)
+server/src/            the relay: rooms, drops, limits, GIPHY proxy, invite page
+client/src/main/       Electron main process: app, hosting, Cloudflare tunnel, connection, overlay, tray, settings
+client/src/renderer/   control window (UI) and overlay window
+client/src/shared/     invite links, panic-key recorder, built-in sounds, validation, layout
+client/src/relay/      generated copy of server/src (scripts/sync-relay.js), so the app can host
 ```
-
-**Tests:**
 
 ```bash
-cd server && npm install && npm test
-cd client && npm install && npm test   # the client tests talk to the real server code, so install the server first
+cd server && npm install && npm test     # relay tests (real sockets, fake GIPHY)
+cd client && npm install && npm test     # app logic, invites, hotkeys, tunnel, hosting
+cd client && npm run test:e2e            # launches the real app; on Windows also checks real screen pixels
+cd client && npm start                   # run the app from source
+cd client && npm run dist                # build the Windows installer → client/dist/
 ```
 
-**End-to-end smoke test.** `npm run test:e2e` (in `client/`) launches the real app, joins a room, has a fake friend drop a meme, and checks the overlay. On Windows and macOS it also checks real screen pixels: the meme is drawn, everything around it shows through, 50% opacity blends correctly, and a real Ctrl+Shift+X keypress clears it. CI runs it against the packaged `MemeDrop.exe` and uploads the screenshots as an artifact. To test a packaged build yourself, set `MEMEDROP_EXE=dist/win-unpacked/MemeDrop.exe`.
+CI runs all of this on every push, including the end-to-end test against the packaged `MemeDrop.exe` on a real Windows desktop. It uploads the installer and the screenshots as artifacts.
 
-**Two clients on one PC.** Each copy needs its own settings folder:
+To test with **two copies on one PC**, give the second its own settings folder:
 
 ```powershell
-# PowerShell, second terminal
 $env:MEMEDROP_USER_DATA = "$env:TEMP\memedrop-2"; npm start
 ```
 
-```bash
-# macOS / Linux
-MEMEDROP_USER_DATA=/tmp/memedrop-2 npm start
-```
-
-**Wire protocol.** JSON over WebSocket. It's documented at the top of [`server/src/relay.js`](server/src/relay.js).
+The built-in sounds are synthesized in code ([`client/src/shared/sounds.js`](client/src/shared/sounds.js)), so there are no audio files to license. The wire protocol is documented at the top of [`server/src/relay.js`](server/src/relay.js).
