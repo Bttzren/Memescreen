@@ -37,6 +37,8 @@ async function main() {
     },
     limits: {
       maxImageBytes: Math.round(envNumber('MAX_IMAGE_MB', 5) * 1024 * 1024),
+      maxVideoBytes: Math.round(envNumber('MAX_VIDEO_MB', 20) * 1024 * 1024),
+      maxSoundBytes: Math.round(envNumber('MAX_SOUND_MB', 3) * 1024 * 1024),
       maxRoomSize: envNumber('MAX_ROOM_SIZE', 30),
     },
   });

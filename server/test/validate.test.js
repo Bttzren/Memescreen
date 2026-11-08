@@ -56,3 +56,41 @@ test('room codes, nicknames and text are normalised', () => {
   assert.equal(V.cleanText('a'.repeat(200), 10), 'aaaaaaaaaa');
   assert.equal(V.cleanText(42, 10), '');
 });
+
+test('sniffMediaMime recognises video and audio by content', () => {
+  const cases = {
+    'tiny.mp4': 'video/mp4',
+    'tiny.webm': 'video/webm',
+    'tiny.mp3': 'audio/mpeg',
+    'tiny-noid3.mp3': 'audio/mpeg',
+    'tiny.wav': 'audio/wav',
+    'tiny.ogg': 'audio/ogg',
+    'tiny.m4a': 'audio/mp4',
+    'tiny.png': 'image/png',
+  };
+  for (const [file, mime] of Object.entries(cases)) {
+    assert.equal(V.sniffMediaMime(fixture(file)), mime, file);
+  }
+  assert.equal(V.sniffMediaMime(Buffer.from('<html><body>hi</body></html>')), null);
+});
+
+test('decodeMedia only accepts the expected kind', () => {
+  const MB = 1024 * 1024;
+  const video = V.decodeMedia(fixture('tiny.mp4').toString('base64'), { kind: 'video', maxBytes: MB });
+  assert.equal(video.mime, 'video/mp4');
+  assert.equal(video.kind, 'video');
+
+  const audio = V.decodeMedia(fixture('tiny.ogg').toString('base64'), { kind: 'audio', maxBytes: MB });
+  assert.equal(audio.mime, 'audio/ogg');
+
+  assert.match(V.decodeMedia(fixture('tiny.mp4').toString('base64'), { kind: 'image', maxBytes: MB }).error, /images/);
+  assert.match(V.decodeMedia(fixture('tiny.png').toString('base64'), { kind: 'audio', maxBytes: MB }).error, /MP3/);
+  assert.match(V.decodeMedia(fixture('tiny.mp3').toString('base64'), { kind: 'video', maxBytes: MB }).error, /MP4/);
+  assert.match(V.decodeMedia(fixture('tiny.mp4').toString('base64'), { kind: 'video', maxBytes: 100 }).error, /Video is too big/);
+});
+
+test('built-in sound list is stable and unique', () => {
+  assert.ok(V.BUILTIN_SOUNDS.length >= 8);
+  assert.equal(new Set(V.BUILTIN_SOUNDS).size, V.BUILTIN_SOUNDS.length);
+  assert.ok(V.BUILTIN_SOUNDS.includes('airhorn'));
+});

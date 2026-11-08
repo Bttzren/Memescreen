@@ -227,3 +227,28 @@ test('a crashing GIF backend returns an error and the server keeps running', asy
     await new Promise((r) => server.close(r));
   }
 });
+
+test('GIF search can be switched on while people are connected', async () => {
+  const fake = fakeGiphyFetch();
+  const server = await startTestServer({ giphyOptions: { fetch: fake.fetch } });
+  const a = await connect(server.port);
+  try {
+    const welcome = await a.join('live', 'A');
+    assert.equal(welcome.features.giphy, false);
+    a.send({ type: 'gif-trending', reqId: 1 });
+    assert.equal((await a.next('error')).code, 'giphy_disabled');
+
+    server.setGiphyKey('pasted-in-the-app');
+    assert.deepEqual((await a.next('features')).features, { giphy: true });
+    assert.equal(server.hasGiphy(), true);
+    a.send({ type: 'gif-trending', reqId: 2 });
+    assert.equal((await a.next('gif-results')).items.length, 2);
+    assert.equal(fake.calls[0].searchParams.get('api_key'), 'pasted-in-the-app');
+
+    server.setGiphyKey('');
+    assert.deepEqual((await a.next('features')).features, { giphy: false });
+  } finally {
+    a.ws.terminate();
+    await server.close();
+  }
+});

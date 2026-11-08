@@ -67,6 +67,54 @@ function sniffImageMime(buf) {
   return null;
 }
 
+const ALLOWED_VIDEO_MIMES = Object.freeze(['video/mp4', 'video/webm']);
+const ALLOWED_AUDIO_MIMES = Object.freeze(['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4']);
+const AUDIO_ONLY_MP4_BRANDS = new Set(['M4A ', 'M4B ', 'F4A ', 'F4B ']);
+
+/** Built-in sound effects (synthesised by the app — no audio files involved). */
+const BUILTIN_SOUNDS = Object.freeze([
+  'airhorn',
+  'boing',
+  'ding',
+  'drumroll',
+  'sad-trombone',
+  'whoosh',
+  'tada',
+  'siren',
+  'toot',
+  'pop',
+]);
+
+/**
+ * Identify any supported media by magic bytes: images (see above), MP4/MOV and
+ * WebM video, and MP3/WAV/OGG/M4A audio. Returns a MIME type or null.
+ */
+function sniffMediaMime(buf) {
+  const image = sniffImageMime(buf);
+  if (image) return image;
+  if (!buf || buf.length < 12) return null;
+  const ascii = (from, to) => String.fromCharCode(...buf.subarray(from, to));
+  // ISO base media (MP4, MOV, M4A): "....ftyp<brand>"
+  if (ascii(4, 8) === 'ftyp') {
+    return AUDIO_ONLY_MP4_BRANDS.has(ascii(8, 12)) ? 'audio/mp4' : 'video/mp4';
+  }
+  // Matroska / WebM: EBML header
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return 'video/webm';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'audio/wav';
+  if (ascii(0, 4) === 'OggS') return 'audio/ogg';
+  // MP3: ID3 tag, or an MPEG audio frame sync (11 set bits)
+  if (ascii(0, 3) === 'ID3') return 'audio/mpeg';
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return 'audio/mpeg';
+  return null;
+}
+
+function mediaKind(mime) {
+  if (ALLOWED_IMAGE_MIMES.includes(mime)) return 'image';
+  if (ALLOWED_VIDEO_MIMES.includes(mime)) return 'video';
+  if (ALLOWED_AUDIO_MIMES.includes(mime)) return 'audio';
+  return null;
+}
+
 /**
  * GIF drops carry a URL that the *recipient's* client loads, so only allow
  * GIPHY's own HTTPS hosts. This stops a "friend" from making everyone's
@@ -86,26 +134,45 @@ function isGiphyUrl(value) {
   return host === 'giphy.com' || host.endsWith('.giphy.com');
 }
 
+const KIND_LABEL = { image: 'Image', video: 'Video', audio: 'Sound' };
+const KIND_FORMATS = {
+  image: 'Only PNG, JPG, GIF and WebP images are supported.',
+  video: 'Only MP4 and WebM videos are supported.',
+  audio: 'Only MP3, WAV, OGG and M4A sounds are supported.',
+};
+
 /**
- * Decode base64 image data and validate it. Returns { mime, base64, bytes } or
- * { error } with a user-friendly message.
+ * Decode base64 media and validate it against the expected kind
+ * ('image' | 'video' | 'audio'). Returns { mime, kind, base64, bytes, width?, height? }
+ * or { error } with a user-friendly message.
  */
-function decodeImage(base64, maxBytes) {
+function decodeMedia(base64, { kind, maxBytes }) {
+  const label = KIND_LABEL[kind] || 'File';
   if (typeof base64 !== 'string' || base64.length === 0) {
-    return { error: 'No image data was sent.' };
+    return { error: `No ${label.toLowerCase()} data was sent.` };
   }
   // Cheap pre-check before allocating: base64 is ~4/3 the size of the bytes.
   if (base64.length > Math.ceil((maxBytes * 4) / 3) + 4) {
-    return { error: `Image is too big (max ${formatBytes(maxBytes)}).` };
+    return { error: `${label} is too big (max ${formatBytes(maxBytes)}).` };
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
-    return { error: 'Image data is not valid base64.' };
+    return { error: `${label} data is not valid base64.` };
   }
   const buf = Buffer.from(base64, 'base64');
-  if (buf.length === 0) return { error: 'Image is empty.' };
-  if (buf.length > maxBytes) return { error: `Image is too big (max ${formatBytes(maxBytes)}).` };
-  const mime = sniffImageMime(buf);
-  if (!mime) return { error: 'Only PNG, JPG, GIF and WebP images are supported.' };
+  if (buf.length === 0) return { error: `${label} is empty.` };
+  if (buf.length > maxBytes) return { error: `${label} is too big (max ${formatBytes(maxBytes)}).` };
+  const mime = sniffMediaMime(buf);
+  if (!mime || mediaKind(mime) !== kind) return { error: KIND_FORMATS[kind] || 'Unsupported file.' };
+  if (kind !== 'image') return { mime, kind, base64: buf.toString('base64'), bytes: buf.length };
+  return checkImage(buf, mime);
+}
+
+/** Decode base64 image data (PNG/JPEG/GIF/WebP) and validate it. */
+function decodeImage(base64, maxBytes) {
+  return decodeMedia(base64, { kind: 'image', maxBytes });
+}
+
+function checkImage(buf, mime) {
   // A tiny file can still decode to billions of pixels ("decompression bomb")
   // and freeze everyone's screen, so check the declared dimensions too.
   const dims = imageDimensions(buf, mime);
@@ -113,7 +180,7 @@ function decodeImage(base64, maxBytes) {
   if (dims.width > MAX_IMAGE_SIDE || dims.height > MAX_IMAGE_SIDE || dims.width * dims.height > MAX_IMAGE_PIXELS) {
     return { error: `That image is ${dims.width}×${dims.height} pixels, which is too large to show.` };
   }
-  return { mime, base64: buf.toString('base64'), bytes: buf.length, width: dims.width, height: dims.height };
+  return { mime, kind: 'image', base64: buf.toString('base64'), bytes: buf.length, width: dims.width, height: dims.height };
 }
 
 const MAX_IMAGE_SIDE = 16384;
@@ -184,6 +251,12 @@ function formatBytes(bytes) {
 module.exports = {
   POSITIONS,
   ALLOWED_IMAGE_MIMES,
+  ALLOWED_VIDEO_MIMES,
+  ALLOWED_AUDIO_MIMES,
+  BUILTIN_SOUNDS,
+  sniffMediaMime,
+  mediaKind,
+  decodeMedia,
   normalizeRoom,
   normalizeNickname,
   cleanText,

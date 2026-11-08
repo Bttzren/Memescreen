@@ -36,7 +36,7 @@ test('joining a room returns a welcome with peers, limits and features', async (
     const welcome = await alice.join('pizza-gang', 'Alice');
     assert.equal(welcome.room, 'PIZZA-GANG', 'room codes are case-insensitive');
     assert.equal(welcome.nickname, 'Alice');
-    assert.equal(welcome.protocol, 1);
+    assert.equal(welcome.protocol, 2);
     assert.deepEqual(welcome.peers, [{ id: welcome.id, nickname: 'Alice' }]);
     assert.equal(welcome.limits.maxImageBytes, 5 * 1024 * 1024);
     assert.deepEqual(welcome.limits.positions, ['random', 'center', 'fullscreen']);
@@ -327,7 +327,7 @@ test('malformed and unknown messages get an error, not a crash', async () => {
 });
 
 test('oversized frames beyond maxPayload close the connection instead of buffering', async () => {
-  await withServer({ limits: { maxImageBytes: 1024 } }, async ({ open }) => {
+  await withServer({ limits: { maxImageBytes: 1024, maxVideoBytes: 1024, maxSoundBytes: 1024 } }, async ({ open }) => {
     const a = await open();
     await a.join('huge', 'A');
     const closed = new Promise((resolve) => a.ws.once('close', (code) => resolve(code)));
@@ -344,5 +344,171 @@ test('GIF search reports when GIPHY is not configured', async () => {
     const err = await a.next('error');
     assert.equal(err.code, 'giphy_disabled');
     assert.equal(err.reqId, 'r1');
+  });
+});
+
+const { fixture } = require('./helpers');
+
+async function trio(open, room = 'party') {
+  const a = await open();
+  const b = await open();
+  const c = await open();
+  await a.join(room, 'Alice');
+  await b.join(room, 'Bob');
+  await c.join(room, 'Cat');
+  return { a, b, c };
+}
+
+test('video drops carry the file, its type and whether to play its sound', async () => {
+  await withServer({}, async ({ open }) => {
+    const { a, b } = await trio(open);
+    const data = fixture('tiny.webm').toString('base64');
+    a.send({ type: 'drop', to: b.id, kind: 'video', data, videoSound: false, durationMs: 0, opacity: 0.7, position: 'center' });
+    const drop = await b.next('drop');
+    assert.equal(drop.kind, 'video');
+    assert.equal(drop.mime, 'video/webm');
+    assert.equal(drop.data, data);
+    assert.equal(drop.videoSound, false);
+    assert.equal(drop.durationMs, 0, 'full clip allowed for video');
+
+    a.send({ type: 'drop', to: b.id, kind: 'video', data: fixture('tiny.mp4').toString('base64'), durationMs: 5000 });
+    const mp4 = await b.next('drop');
+    assert.equal(mp4.mime, 'video/mp4');
+    assert.equal(mp4.videoSound, true, 'video sound on by default');
+    assert.equal(mp4.durationMs, 5000);
+
+    // An image can't sneak in as "video", and images can't ask for a full clip.
+    a.send({ type: 'drop', to: b.id, kind: 'video', data: fixture('tiny.png').toString('base64') });
+    assert.equal((await a.next('error')).code, 'bad_video');
+    a.send({ type: 'drop', to: b.id, kind: 'image', data: fixture('tiny.png').toString('base64'), durationMs: 0 });
+    assert.equal((await b.next('drop')).durationMs, 1000, 'image durations are clamped, never "full clip"');
+  });
+});
+
+test('video size cap is separate from the image cap', async () => {
+  await withServer({ limits: { maxVideoBytes: 1000 } }, async ({ open }) => {
+    const { a } = await trio(open);
+    a.send({ type: 'drop', to: 'all', kind: 'video', data: fixture('tiny.mp4').toString('base64') });
+    const err = await a.next('error');
+    assert.equal(err.code, 'bad_video');
+    assert.match(err.message, /too big/);
+  });
+});
+
+test('sounds: built-in, uploaded, attached to memes, or on their own', async () => {
+  await withServer({ limits: { dropsPerWindow: 50 } }, async ({ open }) => {
+    const { a, b } = await trio(open);
+
+    a.send({ type: 'drop', to: b.id, kind: 'sound', sound: { type: 'builtin', id: 'airhorn' } });
+    let drop = await b.next('drop');
+    assert.equal(drop.kind, 'sound');
+    assert.deepEqual(drop.sound, { type: 'builtin', id: 'airhorn' });
+    assert.equal(drop.durationMs, 0, 'sound-only drops play to the end');
+
+    const mp3 = fixture('tiny.mp3').toString('base64');
+    a.send({ type: 'drop', to: b.id, kind: 'sound', sound: { type: 'file', data: mp3, name: 'bruh.mp3' } });
+    drop = await b.next('drop');
+    assert.deepEqual(drop.sound, { type: 'file', mime: 'audio/mpeg', data: mp3, name: 'bruh.mp3' });
+
+    a.send({ type: 'drop', to: b.id, kind: 'image', data: fixture('tiny.png').toString('base64'), sound: { type: 'builtin', id: 'boing' } });
+    drop = await b.next('drop');
+    assert.equal(drop.kind, 'image');
+    assert.deepEqual(drop.sound, { type: 'builtin', id: 'boing' });
+
+    a.send({ type: 'drop', to: b.id, kind: 'gif', url: 'https://media.giphy.com/media/x/giphy.gif' });
+    assert.equal((await b.next('drop')).sound, null, 'no sound unless asked');
+
+    for (const bad of [
+      { type: 'builtin', id: 'not-a-sound' },
+      { type: 'file', data: fixture('tiny.png').toString('base64') },
+      { type: 'file', data: fixture('tiny.mp4').toString('base64') },
+      { type: 'url', url: 'https://example.com/x.mp3' },
+      'airhorn',
+    ]) {
+      a.send({ type: 'drop', to: b.id, kind: 'sound', sound: bad });
+      assert.equal((await a.next('error')).code, 'bad_sound', JSON.stringify(bad).slice(0, 60));
+    }
+    a.send({ type: 'drop', to: b.id, kind: 'sound' });
+    assert.equal((await a.next('error')).code, 'bad_sound', 'sound-only drop needs a sound');
+    await b.expectNone('drop');
+  });
+});
+
+test('uploaded sounds have their own size cap', async () => {
+  await withServer({ limits: { maxSoundBytes: 500 } }, async ({ open }) => {
+    const { a } = await trio(open);
+    a.send({ type: 'drop', to: 'all', kind: 'sound', sound: { type: 'file', data: fixture('tiny.wav').toString('base64') } });
+    assert.match((await a.next('error')).message, /Sound is too big/);
+  });
+});
+
+test('drops can target several specific friends', async () => {
+  await withServer({}, async ({ open }) => {
+    const { a, b, c } = await trio(open);
+    const d = await open();
+    await d.join('party', 'Dan');
+    const data = fixture('tiny.png').toString('base64');
+
+    a.send({ type: 'drop', ref: 1, to: [b.id, d.id], kind: 'image', data });
+    const [gotB, gotD, sent] = await Promise.all([b.next('drop'), d.next('drop'), a.next('drop-sent')]);
+    assert.equal(gotB.from.nickname, 'Alice');
+    assert.equal(gotD.from.nickname, 'Alice');
+    assert.equal(sent.delivered, 2);
+    assert.deepEqual(sent.to.sort(), [b.id, d.id].sort());
+    await c.expectNone('drop');
+
+    // Duplicates, yourself and people who left are ignored.
+    a.send({ type: 'drop', ref: 2, to: [c.id, c.id, a.id, 'gone'], kind: 'image', data });
+    await c.next('drop');
+    assert.equal((await a.next('drop-sent')).delivered, 1);
+
+    a.send({ type: 'drop', to: ['gone', 'also-gone'], kind: 'image', data });
+    assert.equal((await a.next('error')).code, 'peer_not_found');
+    a.send({ type: 'drop', to: [], kind: 'image', data });
+    assert.equal((await a.next('error')).code, 'peer_not_found');
+  });
+});
+
+test('everyone in a busy room gets drops sent to everyone', async () => {
+  await withServer({}, async ({ open }) => {
+    const people = [];
+    for (let i = 0; i < 8; i += 1) {
+      const p = await open();
+      await p.join('crowd', `Person${i}`);
+      people.push(p);
+    }
+    const [sender, ...rest] = people;
+    const roster = await rest[0].next((m) => m.type === 'roster' && m.peers.length === 8);
+    assert.equal(roster.peers.length, 8);
+    sender.send({ type: 'drop', to: 'all', kind: 'sound', sound: { type: 'builtin', id: 'tada' } });
+    const drops = await Promise.all(rest.map((p) => p.next('drop')));
+    assert.equal(drops.length, 7);
+    assert.ok(drops.every((d) => d.from.nickname === 'Person0'));
+    assert.equal((await sender.next('drop-sent')).delivered, 7);
+    await sender.expectNone('drop');
+  });
+});
+
+test('welcome lists the new limits and sounds', async () => {
+  await withServer({}, async ({ open }) => {
+    const a = await open();
+    const w = await a.join('limits2', 'A');
+    assert.equal(w.limits.maxVideoBytes, 20 * 1024 * 1024);
+    assert.equal(w.limits.maxSoundBytes, 3 * 1024 * 1024);
+    assert.ok(w.limits.sounds.includes('sad-trombone'));
+    assert.deepEqual(w.limits.videoTypes, ['video/mp4', 'video/webm']);
+  });
+});
+
+test('invite links open a friendly landing page', async () => {
+  await withServer({}, async ({ server }) => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/join/pizza-gang`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/html/);
+    const html = await res.text();
+    assert.match(html, /PIZZA-GANG/);
+    assert.match(html, /memedrop:\/\/join\?link=/);
+    assert.equal((await fetch(`http://127.0.0.1:${server.port}/join/<script>`)).status, 404);
+    assert.equal((await fetch(`http://127.0.0.1:${server.port}/join/`)).status, 404);
   });
 });
