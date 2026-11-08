@@ -104,7 +104,7 @@ function createTray({
     notify(title, content) {
       // Windows balloon; harmless no-op elsewhere.
       if (typeof tray.displayBalloon === 'function' && process.platform === 'win32') {
-        tray.displayBalloon({ title, content, iconType: 'none', icon: nativeImage.createFromPath(path.join(ASSETS, 'icon-256.png')) });
+        tray.displayBalloon({ title, content, iconType: 'custom', icon: nativeImage.createFromPath(path.join(ASSETS, 'icon-256.png')) });
       }
     },
     destroy() {
