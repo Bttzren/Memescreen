@@ -8,8 +8,9 @@ const MAX_ON_SCREEN = 6;
 /**
  * The see-through, click-through, always-on-top window that memes appear in.
  *
- * It covers one display (the main one unless picked in the tray), ignores the mouse (so you can keep working or
- * gaming underneath) and is hidden whenever nothing is showing. The panic
+ * It covers one display (the main one unless another is picked in the tray),
+ * ignores the mouse (so you can keep working or gaming underneath) and is
+ * hidden whenever nothing is showing. The panic
  * hotkey hides the window *first* and then clears it, so even if the renderer
  * were stuck, the memes vanish instantly.
  */

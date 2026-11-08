@@ -197,3 +197,33 @@ test('relay rate limits GIF searches per person and relays GIPHY errors', async 
     await server.close();
   }
 });
+
+test('a crashing GIF backend returns an error and the server keeps running', async () => {
+  const http = require('node:http');
+  const { createRelay } = require('../src/relay');
+  const server = http.createServer();
+  const brokenGiphy = {
+    search() {
+      throw new TypeError('kaboom');
+    },
+    trending: async () => {
+      throw new RangeError('also kaboom');
+    },
+  };
+  const relay = createRelay({ server, giphy: brokenGiphy, log: () => {} });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const a = await connect(server.address().port);
+  try {
+    await a.join('crash', 'A');
+    a.send({ type: 'gif-search', reqId: 1, query: 'x' });
+    assert.equal((await a.next('error')).code, 'giphy_error');
+    a.send({ type: 'gif-trending', reqId: 2 });
+    assert.equal((await a.next('error')).code, 'giphy_error');
+    a.send({ type: 'ping', t: 5 });
+    assert.equal((await a.next('pong')).t, 5, 'still alive');
+  } finally {
+    a.ws.terminate();
+    await relay.close();
+    await new Promise((r) => server.close(r));
+  }
+});

@@ -98,11 +98,17 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
         sendError(client, 'bad_message', 'Could not read that message.');
         return;
       }
-      try {
-        handleMessage(client, msg);
-      } catch (err) {
+      const crashed = (err) => {
         log('error', `handler crashed on "${msg.type}": ${err && err.stack ? err.stack : err}`);
         sendError(client, 'server_error', 'Something went wrong on the server.', msg);
+      };
+      try {
+        const result = handleMessage(client, msg);
+        // Async handlers (GIF search) must never become unhandled rejections —
+        // those would take the whole server down.
+        if (result && typeof result.catch === 'function') result.catch(crashed);
+      } catch (err) {
+        crashed(err);
       }
     });
 

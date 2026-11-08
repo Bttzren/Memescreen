@@ -348,6 +348,7 @@
     els.dzEmpty.hidden = has;
     els.dzPreview.hidden = !has;
     els.dropzone.classList.toggle('has-file', has);
+    els.dropzone.title = has ? 'Click to pick a different image' : '';
     if (has) {
       els.uploadPreview.src = ui.upload.url;
       els.uploadName.textContent = ui.upload.name;
@@ -360,7 +361,7 @@
 
   els.dropzone.addEventListener('click', (event) => {
     if (event.target.closest('#upload-clear')) return;
-    if (!ui.upload) els.fileInput.click();
+    els.fileInput.click();
   });
   els.dropzone.addEventListener('keydown', (event) => {
     if ((event.key === 'Enter' || event.key === ' ') && event.target === els.dropzone) {
@@ -497,18 +498,24 @@
     img.alt = item.title;
     img.src = item.preview.url;
     btn.append(img);
-    btn.addEventListener('click', () => {
-      ui.gif = ui.gif && ui.gif.id === item.id ? null : item;
-      for (const el of els.gifGrid.children) {
-        el.setAttribute('aria-pressed', String(Boolean(ui.gif && el.dataset.id === ui.gif.id)));
-      }
-      updateSummary();
+    btn.addEventListener('click', (event) => {
+      // event.detail is 2 on the second click of a double-click: keep it selected.
+      selectGif(ui.gif && ui.gif.id === item.id && event.detail < 2 ? null : item);
     });
+    // Double-click = select and drop straight away.
     btn.addEventListener('dblclick', () => {
-      ui.gif = item;
+      selectGif(item);
       sendDrop();
     });
     return btn;
+  }
+
+  function selectGif(item) {
+    ui.gif = item;
+    for (const el of els.gifGrid.children) {
+      el.setAttribute('aria-pressed', String(Boolean(ui.gif && el.dataset.id === ui.gif.id)));
+    }
+    updateSummary();
   }
 
   els.gifForm.addEventListener('submit', (event) => {

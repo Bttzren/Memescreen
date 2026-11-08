@@ -587,7 +587,6 @@ kbd {
 
 .dropzone.has-file {
   border-style: solid;
-  cursor: default;
 }
 
 .dz-empty {

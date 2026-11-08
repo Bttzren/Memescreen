@@ -390,7 +390,7 @@ function openExternalSafely(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
-    if (u.protocol === 'https:' && (host === 'giphy.com' || host.endsWith('.giphy.com') || host === 'developers.giphy.com')) {
+    if (u.protocol === 'https:' && (host === 'giphy.com' || host.endsWith('.giphy.com'))) {
       shell.openExternal(u.toString());
     }
   } catch {
