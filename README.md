@@ -217,6 +217,8 @@ cd server && npm install && npm test
 cd client && npm install && npm test   # the client tests talk to the real server code, so install the server first
 ```
 
+**End-to-end smoke test.** `npm run test:e2e` (in `client/`) launches the real app, joins a room, has a fake friend drop a meme, and checks the overlay. On Windows and macOS it also checks real screen pixels: the meme is drawn, everything around it shows through, 50% opacity blends correctly, and a real Ctrl+Shift+X keypress clears it. CI runs it against the packaged `MemeDrop.exe` and uploads the screenshots as an artifact. To test a packaged build yourself, set `MEMEDROP_EXE=dist/win-unpacked/MemeDrop.exe`.
+
 **Two clients on one PC.** Each copy needs its own settings folder:
 
 ```powershell

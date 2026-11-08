@@ -14,6 +14,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e/smoke.js",
     "dist": "electron-builder --win --publish never",
     "dist:dir": "electron-builder --win --dir --publish never"
   },
@@ -22,7 +23,8 @@
   },
   "devDependencies": {
     "electron": "^45.2.3",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "playwright-core": "^1.65.0"
   },
   "build": {
     "appId": "com.memedrop.app",

@@ -66,3 +66,19 @@ jobs:
           path: client/dist/*.exe
           if-no-files-found: error
           retention-days: 30
+      # Launch the packaged app on a real Windows desktop: a fake friend drops a
+      # meme, and the test checks actual screen pixels (solid meme, see-through
+      # elsewhere, 50% blend) and that a real Ctrl+Shift+X keypress clears it.
+      - name: Smoke test the packaged app
+        working-directory: client
+        env:
+          MEMEDROP_EXE: dist/win-unpacked/MemeDrop.exe
+        run: npm run test:e2e
+      - name: Upload smoke-test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemeDrop-Smoke-Screenshots
+          path: client/dist/smoke/*.png
+          if-no-files-found: ignore
+          retention-days: 14
