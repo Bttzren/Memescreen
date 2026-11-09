@@ -49,13 +49,14 @@ jobs:
         with:
           node-version: 22
       # Electron + electron-builder downloads come from GitHub releases, which
-      # sometimes time out (504). Restore whatever earlier runs fetched, and
-      # save it again at the end even if this run fails, so runs make progress.
+      # sometimes time out (504). The NSIS tools that kept failing are bundled
+      # in client/vendor/build-tools (npm run dist seeds them); the cache keeps
+      # everything else between runs, saved even when a run fails.
       - uses: actions/cache/restore@v4
         with:
           path: |
-            ~\AppData\Local\electron\Cache
-            ~\AppData\Local\electron-builder\Cache
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
           key: electron-win-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: electron-win-
       - name: Install
@@ -83,8 +84,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            ~\AppData\Local\electron\Cache
-            ~\AppData\Local\electron-builder\Cache
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
           key: electron-win-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: actions/upload-artifact@v4
         with:

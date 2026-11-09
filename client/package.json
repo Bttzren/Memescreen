@@ -19,9 +19,9 @@
     "test": "node --test test/*.test.js",
     "pretest:e2e": "node scripts/sync-relay.js",
     "test:e2e": "node test/e2e/smoke.js",
-    "predist": "node scripts/sync-relay.js",
+    "predist": "node scripts/sync-relay.js && node scripts/seed-build-cache.js",
     "dist": "electron-builder --config electron-builder.config.js --win --publish never",
-    "predist:dir": "node scripts/sync-relay.js",
+    "predist:dir": "node scripts/sync-relay.js && node scripts/seed-build-cache.js",
     "dist:dir": "electron-builder --config electron-builder.config.js --win --dir --publish never"
   },
   "dependencies": {
