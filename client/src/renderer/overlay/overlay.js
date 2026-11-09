@@ -134,7 +134,8 @@
   }
 
   function makeRoom(maxOnScreen) {
-    while (items.size >= (maxOnScreen || 6)) remove(items.keys().next().value, { instant: true });
+    const drops = [...items.keys()].filter((id) => !items.get(id).el.classList.contains('reaction'));
+    while (drops.length >= (maxOnScreen || 6)) remove(drops.shift(), { instant: true });
   }
 
   /** Sound-only drop: a small "Bob played Air horn" pill at the top of the screen. */
@@ -154,11 +155,101 @@
     if (audible) playSound(drop, item, () => remove(drop.id));
   }
 
+  /** Start the entrance animation picked by the sender. */
+  function enter(el, effect) {
+    if (effect && effect !== 'pop') el.classList.add(`fx-${effect}`);
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+  }
+
+  /** "Bob 😂": a friend reacted to something you dropped. */
+  function addReaction(drop) {
+    const el = document.createElement('div');
+    el.className = 'reaction';
+    const emoji = document.createElement('span');
+    emoji.className = 'reaction-emoji';
+    emoji.textContent = drop.emoji;
+    const who = document.createElement('span');
+    who.className = 'reaction-who';
+    who.textContent = drop.from || 'Someone';
+    el.append(emoji, who);
+    // Stack reactions upwards from the bottom-right corner.
+    const stacked = stage.querySelectorAll('.reaction').length;
+    el.style.setProperty('--slot', String(stacked % 5));
+    const item = { el, timers: [], cleanups: [] };
+    items.set(drop.id, item);
+    stage.append(el);
+    report();
+    enter(el, 'bounce');
+    item.timers.push(setTimeout(() => remove(drop.id), 2600));
+  }
+
+  /** Captions in classic meme style, sized to the drop. */
+  function addCaptions(el, caption, box, opacity) {
+    if (!caption) return;
+    for (const where of ['top', 'bottom']) {
+      const text = caption[where];
+      if (!text) continue;
+      const c = document.createElement('div');
+      c.className = `caption caption--${where}`;
+      c.textContent = text;
+      const shrink = Math.min(1, Math.sqrt(24 / Math.max(1, text.length)));
+      c.style.fontSize = `${Math.max(14, Math.min(box.width * 0.1, box.height * 0.15) * shrink)}px`;
+      c.style.opacity = String(opacity);
+      el.append(c);
+    }
+  }
+
+  /** Text drop: big meme text that scales like an image would. */
+  function addText(drop) {
+    const el = document.createElement('div');
+    el.className = `drop drop--text drop--${drop.position}${drop.preview ? ' drop--preview' : ''}`;
+    const card = document.createElement('div');
+    card.className = `text-card c-${drop.color || 'white'}`;
+    card.textContent = drop.text;
+    const timer = document.createElement('div');
+    timer.className = 'timer';
+    el.append(card, makeTag(drop), timer);
+    const item = { el, timers: [], cleanups: [] };
+    items.set(drop.id, item);
+
+    // Measure at a reference size (wrapping is in em, so it scales evenly)...
+    const REF = 100;
+    card.style.fontSize = `${REF}px`;
+    el.style.visibility = 'hidden';
+    stage.append(el);
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    // ...then size it like an image of that shape.
+    const box = computeLayout({ position: drop.position, imgW: w, imgH: h, viewW: window.innerWidth, viewH: window.innerHeight });
+    card.style.fontSize = `${(REF * box.width) / Math.max(1, w)}px`;
+    el.style.left = `${box.left}px`;
+    el.style.top = `${box.top}px`;
+    el.style.width = `${box.width}px`;
+    el.style.height = `${box.height}px`;
+    el.style.setProperty('--rot', `${box.rotation}deg`);
+    card.style.opacity = String(drop.opacity);
+    el.style.visibility = '';
+    report();
+
+    timer.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: drop.durationMs, easing: 'linear', fill: 'forwards' });
+    enter(el, drop.effect);
+    item.timers.push(setTimeout(() => remove(drop.id), drop.durationMs + 50));
+    playSound(drop, item);
+  }
+
   function add(drop) {
     if (!drop || !drop.id || items.has(drop.id)) return;
+    if (drop.kind === 'reaction') {
+      addReaction(drop);
+      return;
+    }
     makeRoom(drop.maxOnScreen);
     if (drop.kind === 'sound') {
       addSoundOnly(drop);
+      return;
+    }
+    if (drop.kind === 'text') {
+      addText(drop);
       return;
     }
 
@@ -211,6 +302,7 @@
       el.style.height = `${box.height}px`;
       el.style.setProperty('--rot', `${box.rotation}deg`);
       media.style.opacity = String(drop.opacity);
+      addCaptions(el, drop.caption, box, drop.opacity);
       stage.append(el);
 
       let lifetime = drop.durationMs;
@@ -232,7 +324,7 @@
         easing: 'linear',
         fill: 'forwards',
       });
-      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+      enter(el, drop.effect);
       item.timers.push(setTimeout(() => remove(drop.id), lifetime + 50));
       playSound(drop, item);
     };

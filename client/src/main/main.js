@@ -162,6 +162,7 @@ function run() {
       sendState();
     });
     connection.on('drop', handleIncomingDrop);
+    connection.on('reaction', handleReaction);
     connection.on('server-error', (msg) => sendToControl('notice', { kind: 'error', text: msg.message }));
 
     powerMonitor.on('resume', () => connection.reconnectNow());
@@ -303,6 +304,7 @@ function run() {
       muted: s.muted,
       soundsEnabled: s.soundsEnabled,
       soundVolume: s.soundVolume,
+      mutedFriends: mutedFriends(),
       theme: s.theme,
       hasGiphyKey: Boolean(s.giphyKey),
       hotkey: { accelerator: hotkey.accelerator, label: hotkeyLabel(), ok: hotkey.ok },
@@ -330,6 +332,8 @@ function run() {
     if ('opacity' in patch) clean.opacity = opts.opacity;
     if ('durationMs' in patch) clean.durationMs = opts.durationMs;
     if ('position' in patch) clean.position = opts.position;
+    if ('effect' in patch) clean.effect = opts.effect;
+    if ('textColor' in patch) clean.textColor = V.normalizeTextColor(patch.textColor);
     settings.update(clean);
     if ('soundsEnabled' in clean) tray.update({ soundsEnabled: clean.soundsEnabled });
     sendState();
@@ -424,17 +428,64 @@ function run() {
 
   // ------------------------------------------------------------------- drops
 
+  function mutedFriends() {
+    const list = settings.get().mutedFriends;
+    return Array.isArray(list) ? list.filter((n) => typeof n === 'string') : [];
+  }
+
+  function isFriendMuted(nickname) {
+    return mutedFriends().includes(String(nickname).toLowerCase());
+  }
+
+  function setFriendMuted(nickname, muted) {
+    const name = V.normalizeNickname(nickname);
+    if (!name) return { ok: false };
+    const key = name.toLowerCase();
+    const rest = mutedFriends().filter((n) => n !== key);
+    settings.update({ mutedFriends: muted ? [...rest, key].slice(-100) : rest });
+    sendState();
+    return { ok: true };
+  }
+
+  function senderOf(msg) {
+    const from = msg.from || {};
+    return {
+      name: typeof from.nickname === 'string' ? from.nickname : 'Someone',
+      id: typeof from.id === 'string' ? from.id : null,
+    };
+  }
+
   function handleIncomingDrop(msg) {
-    const from = msg.from && typeof msg.from.nickname === 'string' ? msg.from.nickname : 'Someone';
+    const sender = senderOf(msg);
+    if (isFriendMuted(sender.name)) return; // you asked not to see this person's drops
     const s = settings.get();
+    const notice = {
+      from: sender.name,
+      fromId: sender.id,
+      dropId: typeof msg.dropId === 'string' ? msg.dropId : null,
+      kind: msg.kind,
+      text: msg.kind === 'text' ? V.cleanText(msg.text, V.MAX_TEXT_LENGTH) : '',
+      muted: s.muted,
+      at: Date.now(),
+    };
     if (s.muted) {
-      sendToControl('incoming', { from, kind: msg.kind, muted: true, at: Date.now() });
+      sendToControl('incoming', notice);
       return;
     }
     const drop = toOverlayDrop(msg, connection.state.limits);
     if (!drop) return;
-    overlay.show({ ...drop, from, volume: s.soundsEnabled ? s.soundVolume : 0 });
-    sendToControl('incoming', { from, kind: msg.kind, muted: false, at: Date.now() });
+    overlay.show({ ...drop, from: sender.name, volume: s.soundsEnabled ? s.soundVolume : 0 });
+    sendToControl('incoming', notice);
+  }
+
+  function handleReaction(msg) {
+    if (!V.REACTIONS.includes(msg.emoji)) return;
+    const sender = senderOf(msg);
+    if (isFriendMuted(sender.name)) return;
+    if (!settings.get().muted) {
+      overlay.show({ id: `r-${crypto.randomBytes(4).toString('hex')}`, kind: 'reaction', emoji: msg.emoji, from: sender.name });
+    }
+    sendToControl('reaction', { from: sender.name, emoji: msg.emoji });
   }
 
   async function checkGiphyKey(key) {
@@ -523,6 +574,14 @@ function run() {
         return { ok: false, error: err.message };
       }
     });
+
+    ipcMain.handle('drop:react', (_e, { to, emoji, dropId } = {}) => {
+      if (!V.REACTIONS.includes(emoji) || typeof to !== 'string') return { ok: false, error: 'Unknown reaction.' };
+      const sent = connection.send({ type: 'react', to, emoji, dropId: typeof dropId === 'string' ? dropId : undefined });
+      return sent ? { ok: true } : { ok: false, error: "You're not connected right now." };
+    });
+
+    ipcMain.handle('friend:mute', (_e, { nickname, muted } = {}) => setFriendMuted(nickname, Boolean(muted)));
 
     ipcMain.handle('gif:search', async (_e, { query, offset } = {}) => gifRequest({ type: 'gif-search', query, offset }));
     ipcMain.handle('gif:trending', async (_e, { offset } = {}) => gifRequest({ type: 'gif-trending', offset }));
@@ -684,6 +743,14 @@ function buildOutgoingDrop(payload, limits) {
   const opts = V.normalizeDropOptions(payload, limits, { allowFullClip: kind === 'video' || kind === 'sound' });
   const sound = buildSound(payload.sound, limits);
 
+  const caption = V.normalizeCaption(payload.caption);
+
+  if (kind === 'text') {
+    const text = V.cleanText(payload.text, V.MAX_TEXT_LENGTH);
+    if (!text) throw new Error('Type a message to drop.');
+    return { kind: 'text', text, color: V.normalizeTextColor(payload.color), ...opts, sound };
+  }
+
   if (kind === 'image' || kind === 'video') {
     const bytes = asBytes(payload.bytes);
     if (!bytes) throw new Error('Pick a file first.');
@@ -695,6 +762,7 @@ function buildOutgoingDrop(payload, limits) {
     if (V.mediaKind(mime) !== kind) throw new Error(KIND_FORMATS[kind]);
     const out = { kind, mime, data: toBase64(bytes), ...opts, sound };
     if (kind === 'video') out.videoSound = payload.videoSound !== false;
+    if (caption) out.caption = caption;
     return out;
   }
 
@@ -708,6 +776,7 @@ function buildOutgoingDrop(payload, limits) {
       title: typeof payload.title === 'string' ? payload.title.slice(0, 100) : '',
       ...opts,
       sound,
+      ...(caption ? { caption } : {}),
     };
   }
 
@@ -716,7 +785,7 @@ function buildOutgoingDrop(payload, limits) {
     return { kind: 'sound', durationMs: 0, sound };
   }
 
-  throw new Error('Pick an image, video, GIF or sound first.');
+  throw new Error('Pick an image, video, GIF, sound or message first.');
 }
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -741,6 +810,7 @@ function toOverlayDrop(msg, limits) {
     title: typeof msg.title === 'string' ? msg.title.slice(0, 100) : '',
     maxClipMs: limits.maxClipMs || 60000,
     ...opts,
+    caption: V.normalizeCaption(msg.caption),
     sound: null,
   };
 
@@ -753,6 +823,11 @@ function toOverlayDrop(msg, limits) {
   } else if (kind === 'gif') {
     if (!V.isGiphyUrl(msg.url)) return null; // never load arbitrary URLs from strangers
     drop.src = msg.url;
+  } else if (kind === 'text') {
+    drop.text = V.cleanText(msg.text, V.MAX_TEXT_LENGTH);
+    if (!drop.text) return null;
+    drop.color = V.normalizeTextColor(msg.color);
+    drop.caption = null;
   } else if (kind !== 'sound') {
     return null;
   }

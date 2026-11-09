@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('memedrop', {
   previewDrop: (payload) => ipcRenderer.invoke('drop:preview', payload),
   searchGifs: (query, offset) => ipcRenderer.invoke('gif:search', { query, offset }),
   trendingGifs: (offset) => ipcRenderer.invoke('gif:trending', { offset }),
+  react: (to, emoji, dropId) => ipcRenderer.invoke('drop:react', { to, emoji, dropId }),
+  muteFriend: (nickname, muted) => ipcRenderer.invoke('friend:mute', { nickname, muted }),
   // Settings
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
   setMuted: (muted) => ipcRenderer.invoke('mute:set', muted),
@@ -37,5 +39,6 @@ contextBridge.exposeInMainWorld('memedrop', {
   onState: (cb) => subscribe('state', cb),
   onNotice: (cb) => subscribe('notice', cb),
   onIncoming: (cb) => subscribe('incoming', cb),
+  onReaction: (cb) => subscribe('reaction', cb),
   onInvite: (cb) => subscribe('invite', cb),
 });

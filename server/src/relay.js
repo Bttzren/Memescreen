@@ -9,6 +9,11 @@ const {
   ALLOWED_AUDIO_MIMES,
   BUILTIN_SOUNDS,
   POSITIONS,
+  REACTIONS,
+  MAX_TEXT_LENGTH,
+  normalizeEffect,
+  normalizeTextColor,
+  normalizeCaption,
   normalizeRoom,
   normalizeNickname,
   cleanText,
@@ -18,7 +23,7 @@ const {
   decodeMedia,
 } = require('./validate');
 
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 
 const DEFAULT_LIMITS = Object.freeze({
   maxImageBytes: 5 * 1024 * 1024,
@@ -36,12 +41,15 @@ const DEFAULT_LIMITS = Object.freeze({
   dropWindowMs: 10_000,
   searchesPerWindow: 20,
   searchWindowMs: 60_000,
+  reactionsPerWindow: 12,
+  reactionWindowMs: 10_000,
 });
 
 // Skip a recipient whose connection is this backed up rather than buffering forever.
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 
-const KIND_LABEL = { image: 'an image', gif: 'a GIF', video: 'a video', sound: 'a sound' };
+const KIND_LABEL = { image: 'an image', gif: 'a GIF', video: 'a video', sound: 'a sound', text: 'a message' };
+const DROP_KINDS = Object.keys(KIND_LABEL);
 const KIND_ERROR = { image: 'bad_image', video: 'bad_video', sound: 'bad_sound' };
 const HEARTBEAT_MS = 30_000;
 
@@ -54,10 +62,15 @@ const HEARTBEAT_MS = 30_000;
  *     { type: 'drop', ref?, to, kind: 'image', data: <base64>, opacity, durationMs, position, sound? }
  *     { type: 'drop', ref?, to, kind: 'video', data: <base64>, videoSound, opacity, durationMs, position, sound? }
  *     { type: 'drop', ref?, to, kind: 'gif', url, width?, height?, title?, opacity, durationMs, position, sound? }
+ *     { type: 'drop', ref?, to, kind: 'text', text, color?, opacity, durationMs, position, sound? }
  *     { type: 'drop', ref?, to, kind: 'sound', sound, durationMs }
  *       to:         'all' | <peerId> | [<peerId>, ...]
  *       sound:      { type: 'builtin', id } | { type: 'file', data: <base64 mp3/wav/ogg/m4a>, name? }
  *       durationMs: 1000–15000, or 0 for video/sound = "play the whole clip" (max maxClipMs)
+ *       effect?:    'pop' | 'slide' | 'bounce' | 'shake' | 'spin' | 'zoom' | 'none'
+ *       caption?:   { top?, bottom? } meme text on images, GIFs and videos
+ *       text:       up to 140 characters; color: white | yellow | pink | cyan | lime | orange
+ *     { type: 'react', to: <peerId>, emoji, dropId? }    (emoji from REACTIONS)
  *     { type: 'gif-search', reqId, query, offset? }
  *     { type: 'gif-trending', reqId, offset? }
  *     { type: 'leave' }
@@ -67,6 +80,7 @@ const HEARTBEAT_MS = 30_000;
  *     { type: 'roster', peers: [{ id, nickname }] }      (everyone in the room, including you)
  *     { type: 'drop', dropId, from: { id, nickname }, kind, ... }
  *     { type: 'drop-sent', ref, dropId, delivered, to }
+ *     { type: 'reaction', from: { id, nickname }, emoji, dropId }
  *     { type: 'gif-results', reqId, mode, query, items, nextOffset, total }
  *     { type: 'error', code, message, ref?, reqId? }
  */
@@ -95,6 +109,7 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
       isAlive: true,
       dropLimiter: createRateLimiter({ limit: limits.dropsPerWindow, windowMs: limits.dropWindowMs }),
       searchLimiter: createRateLimiter({ limit: limits.searchesPerWindow, windowMs: limits.searchWindowMs }),
+      reactLimiter: createRateLimiter({ limit: limits.reactionsPerWindow, windowMs: limits.reactionWindowMs }),
     };
 
     ws.on('pong', () => {
@@ -167,6 +182,8 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
         return undefined;
       case 'drop':
         return handleDrop(client, msg);
+      case 'react':
+        return handleReact(client, msg);
       case 'gif-search':
       case 'gif-trending':
         return handleGif(client, msg);
@@ -239,7 +256,7 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
     if (target.error) return sendError(client, 'peer_not_found', target.error, msg);
 
     const kind = msg.kind;
-    if (!['image', 'video', 'gif', 'sound'].includes(kind)) {
+    if (!DROP_KINDS.includes(kind)) {
       return sendError(client, 'bad_message', 'Unknown drop kind.', msg);
     }
 
@@ -259,9 +276,12 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
         ? 0
         : Math.round(clampNumber(msg.durationMs, limits.minDurationMs, limits.maxDurationMs, limits.defaultDurationMs)),
       position: normalizePosition(msg.position),
+      effect: normalizeEffect(msg.effect),
       sound: sound.value,
       sentAt: Date.now(),
     };
+    const caption = kind === 'sound' || kind === 'text' ? null : normalizeCaption(msg.caption);
+    if (caption) base.caption = caption;
 
     let outgoing;
     if (kind === 'image' || kind === 'video') {
@@ -281,6 +301,10 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
         height: optionalDimension(msg.height),
         title: cleanText(msg.title, 100),
       };
+    } else if (kind === 'text') {
+      const text = cleanText(msg.text, MAX_TEXT_LENGTH);
+      if (!text) return sendError(client, 'bad_text', 'Type a message to drop.', msg);
+      outgoing = { ...base, text, color: normalizeTextColor(msg.color) };
     } else {
       outgoing = base; // sound only
     }
@@ -303,6 +327,21 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
       delivered,
     });
     log('info', `${client.nickname} dropped ${KIND_LABEL[kind]} on ${target.label} in ${client.room} (${delivered} delivered)`);
+    return undefined;
+  }
+
+  function handleReact(client, msg) {
+    if (!client.room) return sendError(client, 'not_joined', 'Join a room first.', msg);
+    if (!client.reactLimiter.take()) {
+      return sendError(client, 'rate_limited', 'Easy on the reactions!', msg);
+    }
+    if (!REACTIONS.includes(msg.emoji)) return sendError(client, 'bad_message', 'Unknown reaction.', msg);
+    const peer = typeof msg.to === 'string' ? rooms.get(client.room).get(msg.to) : null;
+    if (!peer || peer === client) {
+      return sendError(client, 'peer_not_found', "They're not in the room anymore.", msg);
+    }
+    const dropId = typeof msg.dropId === 'string' && /^[a-f0-9]{1,32}$/.test(msg.dropId) ? msg.dropId : null;
+    send(peer, { type: 'reaction', from: { id: client.id, nickname: client.nickname }, emoji: msg.emoji, dropId });
     return undefined;
   }
 

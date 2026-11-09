@@ -29,7 +29,8 @@ function normalizeNickname(value) {
 
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return '';
-  return value.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+  // Line breaks and tabs become spaces first, so "hi\nthere" keeps its gap.
+  return value.replace(/[\t\n\r]+/g, ' ').replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -84,6 +85,31 @@ const BUILTIN_SOUNDS = Object.freeze([
   'toot',
   'pop',
 ]);
+
+/** How a drop arrives on screen. */
+const EFFECTS = Object.freeze(['pop', 'slide', 'bounce', 'shake', 'spin', 'zoom', 'none']);
+/** Colors for text drops (names, so senders can't inject CSS). */
+const TEXT_COLORS = Object.freeze(['white', 'yellow', 'pink', 'cyan', 'lime', 'orange']);
+/** Quick reactions friends can send back after a drop. */
+const REACTIONS = Object.freeze(['😂', '🔥', '💀', '😭', '❤️', '👍', '😮', '🤡']);
+const MAX_CAPTION_LENGTH = 80;
+const MAX_TEXT_LENGTH = 140;
+
+function normalizeEffect(value) {
+  return EFFECTS.includes(value) ? value : 'pop';
+}
+
+function normalizeTextColor(value) {
+  return TEXT_COLORS.includes(value) ? value : 'white';
+}
+
+/** Meme captions: { top, bottom } with at least one filled in, or null. */
+function normalizeCaption(value) {
+  if (!value || typeof value !== 'object') return null;
+  const top = cleanText(value.top, MAX_CAPTION_LENGTH);
+  const bottom = cleanText(value.bottom, MAX_CAPTION_LENGTH);
+  return top || bottom ? { top, bottom } : null;
+}
 
 /**
  * Identify any supported media by magic bytes: images (see above), MP4/MOV and
@@ -254,6 +280,14 @@ module.exports = {
   ALLOWED_VIDEO_MIMES,
   ALLOWED_AUDIO_MIMES,
   BUILTIN_SOUNDS,
+  EFFECTS,
+  TEXT_COLORS,
+  REACTIONS,
+  MAX_CAPTION_LENGTH,
+  MAX_TEXT_LENGTH,
+  normalizeEffect,
+  normalizeTextColor,
+  normalizeCaption,
   sniffMediaMime,
   mediaKind,
   decodeMedia,

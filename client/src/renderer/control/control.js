@@ -44,7 +44,23 @@
     aloneHint: $('alone-hint'),
     aloneInvite: $('alone-invite'),
     tabs: $$('.tab'),
-    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), sounds: $('panel-sounds') },
+    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), text: $('panel-text'), sounds: $('panel-sounds') },
+    inboxBtn: $('inbox-btn'),
+    inboxBadge: $('inbox-badge'),
+    inbox: $('inbox'),
+    inboxClose: $('inbox-close'),
+    inboxList: $('inbox-list'),
+    inboxEmpty: $('inbox-empty'),
+    textInput: $('text-input'),
+    textColors: $('text-colors'),
+    textCount: $('text-count'),
+    textPreview: $('text-preview'),
+    effectSelect: $('effect-select'),
+    captionToggle: $('caption-toggle'),
+    captionInputs: $('caption-inputs'),
+    captionTop: $('caption-top'),
+    captionBottom: $('caption-bottom'),
+    mutedFriends: $('muted-friends'),
     dropzone: $('dropzone'),
     fileInput: $('file-input'),
     dzEmpty: $('dz-empty'),
@@ -137,7 +153,14 @@
     sending: false,
     recording: false,
     leaveArmed: null,
+    textColor: 'white',
+    inbox: [], // newest first: { key, from, fromId, dropId, kind, text, at, reacted }
+    unread: 0,
   };
+
+  const TEXT_COLORS = { white: '#ffffff', yellow: '#ffe14d', pink: '#ff5fb4', cyan: '#4de8ff', lime: '#9dff4d', orange: '#ff9a3d' };
+  const REACTIONS = ['😂', '🔥', '💀', '😭', '❤️', '👍', '😮', '🤡'];
+  const KIND_WORDS = { gif: 'a GIF', video: 'a video', sound: 'a sound', image: 'a meme', text: 'a message' };
 
   // ================================================================ helpers
 
@@ -263,6 +286,7 @@
     renderHostProgress();
     if (inRoom) renderMain(prev);
     renderSettings();
+    renderInbox();
   }
 
   // ======================================================== welcome / host
@@ -464,6 +488,8 @@
       children.push(av);
     }
     children.push(el('span', { class: 'chip-label', text: label }));
+    const muted = Boolean(avatarName) && isMutedName(avatarName);
+    if (muted) children.push(el('span', { class: 'chip-muted', text: '🔇', 'aria-label': '(muted)' }));
     return el(
       'button',
       {
@@ -471,7 +497,10 @@
         class: 'chip',
         'aria-pressed': String(pressed),
         'data-id': id,
-        title: id === 'all' ? 'Drop it on everyone in the room' : `Pick ${label} (click more names to pick several)`,
+        title:
+          id === 'all'
+            ? 'Drop it on everyone in the room'
+            : `Pick ${label} (click more names to pick several)${muted ? `. You muted ${label}, so you won't see their drops.` : ''}`,
         onclick: () => {
           if (id === 'all') ui.targets.clear();
           else if (ui.targets.has(id)) ui.targets.delete(id);
@@ -530,8 +559,10 @@
     for (const tab of els.tabs) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
     for (const [key, panel] of Object.entries(els.panels)) panel.hidden = key !== name;
     for (const row of $$('[data-visual]')) row.hidden = name === 'sounds';
+    for (const row of $$('[data-caption]')) row.hidden = name === 'sounds' || name === 'text';
     els.videoOptions.hidden = !(name === 'upload' && ui.upload && ui.upload.kind === 'video');
     if (name === 'gifs' && !ui.gifLoadedOnce) loadGifs();
+    if (name === 'text') setTimeout(() => els.textInput.focus(), 0);
     updateSummary();
   }
 
@@ -1053,12 +1084,18 @@
       opacity: Number(els.opacity.value) / 100,
       durationMs: Number(els.duration.value) * 1000,
       position: ui.position,
+      effect: els.effectSelect.value,
     };
     if (ui.tab === 'sounds') {
       const sound = soundPayload(ui.soundPick);
       return sound ? { kind: 'sound', sound } : null;
     }
     const sound = soundPayload(ui.attachSound);
+    if (ui.tab === 'text') {
+      const text = els.textInput.value.trim();
+      return text ? { kind: 'text', text, color: ui.textColor, ...base, sound } : null;
+    }
+    base.caption = captionPayload();
     if (ui.tab === 'upload') {
       if (!ui.upload) return null;
       if (ui.upload.kind === 'video') {
@@ -1085,10 +1122,21 @@
     };
   }
 
+  function captionPayload() {
+    if (els.captionInputs.hidden) return undefined;
+    const top = els.captionTop.value.trim();
+    const bottom = els.captionBottom.value.trim();
+    return top || bottom ? { top, bottom } : undefined;
+  }
+
   function updateSummary() {
     const target = targetLabel();
     let parts;
-    if (ui.tab === 'sounds') {
+    if (ui.tab === 'text') {
+      const text = els.textInput.value.trim();
+      const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
+      parts = text ? [['strong', `“${text.length > 40 ? `${text.slice(0, 40)}…` : text}”`], ...extra, ' → ', ['strong', target]] : ['Type a message to drop.'];
+    } else if (ui.tab === 'sounds') {
       parts = ui.soundPick ? [['strong', soundName(ui.soundPick)], ' → ', ['strong', target]] : ['Pick a sound to play on their speakers.'];
     } else {
       const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
@@ -1130,6 +1178,10 @@
     const res = await api.sendDrop({ ...payload, to: targets.length ? targets : 'all' });
     ui.sending = false;
     updateSendState();
+    if (res.ok && payload.kind === 'text') {
+      els.textInput.value = '';
+      renderText();
+    }
     if (!res.ok) toast(res.error, 'error');
     else if (res.delivered === 0) toast('Sent, but nobody else is in the room yet. Send them the invite link!');
     else if (!targets.length) toast(`Dropped on ${res.delivered} friend${res.delivered === 1 ? '' : 's'}!`, 'success');
@@ -1143,6 +1195,168 @@
     const res = await api.previewDrop(payload);
     if (!res.ok) toast(res.error, 'error');
   });
+
+  // ================================================================== text
+
+  function renderTextColors() {
+    els.textColors.replaceChildren(
+      ...Object.entries(TEXT_COLORS).map(([name, color]) => {
+        const dot = el('button', {
+          type: 'button',
+          class: 'color-dot',
+          role: 'radio',
+          'aria-checked': String(name === ui.textColor),
+          'aria-label': name,
+          title: name[0].toUpperCase() + name.slice(1),
+          'data-color': name,
+          onclick: () => {
+            ui.textColor = name;
+            api.updateSettings({ textColor: name });
+            renderTextColors();
+            renderText();
+          },
+        });
+        dot.style.setProperty('--dot', color);
+        return dot;
+      }),
+    );
+  }
+
+  function renderText() {
+    const text = els.textInput.value;
+    els.textCount.textContent = `${text.length}/140`;
+    els.textPreview.textContent = text.trim() || 'Your message';
+    els.textPreview.className = `text-preview c-${ui.textColor}${text.trim() ? '' : ' placeholder'}`;
+    updateSummary();
+  }
+
+  els.textInput.addEventListener('input', renderText);
+  els.textInput.addEventListener('keydown', (event) => {
+    // Enter sends, like a chat box (the message is one line anyway).
+    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      if (els.textInput.value.trim()) sendDrop();
+    }
+  });
+
+  // ======================================================== effect/caption
+
+  els.effectSelect.addEventListener('change', () => api.updateSettings({ effect: els.effectSelect.value }));
+
+  function setCaptionOpen(open) {
+    els.captionInputs.hidden = !open;
+    els.captionToggle.textContent = open ? '－ Remove meme text' : '＋ Add top/bottom text';
+    if (open) els.captionTop.focus();
+    else {
+      els.captionTop.value = '';
+      els.captionBottom.value = '';
+    }
+  }
+  els.captionToggle.addEventListener('click', () => setCaptionOpen(els.captionInputs.hidden));
+
+  // ================================================================= inbox
+
+  function timeAgo(at) {
+    const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+    if (secs < 45) return 'just now';
+    if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+    return `${Math.round(secs / 3600)}h ago`;
+  }
+
+  function isMutedName(name) {
+    const list = (ui.conn && ui.conn.mutedFriends) || [];
+    return list.includes(String(name).toLowerCase());
+  }
+
+  function setInboxOpen(open) {
+    els.inbox.hidden = !open;
+    els.inboxBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      ui.unread = 0;
+      renderInbox();
+    }
+    renderInboxBadge();
+  }
+
+  function renderInboxBadge() {
+    els.inboxBadge.hidden = ui.unread === 0;
+    els.inboxBadge.textContent = ui.unread > 9 ? '9+' : String(ui.unread);
+  }
+
+  function renderInbox() {
+    renderInboxBadge();
+    if (els.inbox.hidden) return;
+    els.inboxEmpty.hidden = ui.inbox.length > 0;
+    els.inboxList.replaceChildren(
+      ...ui.inbox.map((entry) => {
+        const muted = isMutedName(entry.from);
+        const av = el('span', { class: 'avatar', text: [...entry.from.trim()][0].toUpperCase() });
+        av.style.setProperty('--avatar', `hsl(${hueFor(entry.from)} 60% 50%)`);
+        const line = el('div', { class: 'inbox-line' }, [
+          el('strong', { text: entry.from }),
+          el('span', { class: 'inbox-what', text: ` sent ${KIND_WORDS[entry.kind] || 'something'}` }),
+          el('span', { class: 'inbox-time', text: ` · ${timeAgo(entry.at)}` }),
+        ]);
+        const quote = entry.text ? el('div', { class: 'inbox-text', text: `“${entry.text}”` }) : null;
+        const canReact = Boolean(entry.fromId) && isConnected() && otherPeers().some((p) => p.id === entry.fromId);
+        const reactions = el(
+          'div',
+          { class: 'reactions', role: 'group', 'aria-label': `React to ${entry.from}` },
+          REACTIONS.map((emoji) =>
+            el('button', {
+              type: 'button',
+              class: `react-btn${entry.reacted === emoji ? ' picked' : ''}`,
+              text: emoji,
+              title: canReact ? `Send ${emoji} to ${entry.from}` : `${entry.from} isn't here anymore`,
+              disabled: !canReact,
+              onclick: async () => {
+                const res = await api.react(entry.fromId, emoji, entry.dropId);
+                if (!res.ok) return toast(res.error, 'error');
+                entry.reacted = emoji;
+                renderInbox();
+                return toast(`Sent ${emoji} to ${entry.from}!`, 'success');
+              },
+            }),
+          ),
+        );
+        const mute = el('button', {
+          type: 'button',
+          class: 'link-btn inbox-mute',
+          text: muted ? `Unmute ${entry.from}` : `Mute ${entry.from}`,
+          title: muted ? `Show ${entry.from}'s drops again` : `Stop showing anything ${entry.from} sends you`,
+          onclick: async () => {
+            await api.muteFriend(entry.from, !muted);
+            toast(muted ? `${entry.from} is unmuted.` : `Muted ${entry.from}. Their drops won't show up anymore.`);
+          },
+        });
+        return el('li', { class: `inbox-item${muted ? ' is-muted' : ''}` }, [av, el('div', { class: 'inbox-body' }, [line, quote, reactions]), mute]);
+      }),
+    );
+  }
+
+  els.inboxBtn.addEventListener('click', () => setInboxOpen(els.inbox.hidden));
+  els.inboxClose.addEventListener('click', () => setInboxOpen(false));
+
+  function renderMutedFriends() {
+    const list = (ui.conn && ui.conn.mutedFriends) || [];
+    if (!list.length) {
+      els.mutedFriends.replaceChildren(el('p', { class: 'setting-help', text: "Muted friends: nobody. To mute someone, open 📥 (top bar) and click Mute under one of their drops." }));
+      return;
+    }
+    els.mutedFriends.replaceChildren(
+      el('p', { class: 'setting-help', text: "Muted friends (their drops and reactions never show up):" }),
+      el(
+        'div',
+        { class: 'muted-list' },
+        list.map((name) =>
+          el('span', { class: 'muted-chip' }, [
+            el('span', { text: name }),
+            el('button', { type: 'button', class: 'link-btn', text: 'Unmute', onclick: () => api.muteFriend(name, false) }),
+          ]),
+        ),
+      ),
+    );
+  }
 
   // ============================================================== settings
 
@@ -1217,6 +1431,7 @@
     els.soundVolumeOut.textContent = `${els.soundVolume.value}%`;
     setRangeFill(els.soundVolume);
     els.settingsMuted.checked = Boolean(s.muted);
+    renderMutedFriends();
     for (const sw of $$('.theme-swatch', els.themeList)) sw.setAttribute('aria-checked', String(sw.dataset.theme === s.theme));
     renderGiphySettings();
   }
@@ -1338,6 +1553,10 @@
       closeSettings();
       return;
     }
+    if (event.key === 'Escape' && !els.inbox.hidden) {
+      setInboxOpen(false);
+      return;
+    }
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && ui.view === 'main' && els.settings.hidden) {
       event.preventDefault();
       sendDrop();
@@ -1346,10 +1565,16 @@
 
   // ================================================================ events
 
-  api.onIncoming(({ from, kind, muted }) => {
-    const what = { gif: 'a GIF', video: 'a video', sound: 'a sound', image: 'a meme' }[kind] || 'something';
-    toast(muted ? `${from} sent ${what} (hidden while muted)` : `${from} dropped ${what} on you!`);
+  api.onIncoming((n) => {
+    const what = KIND_WORDS[n.kind] || 'something';
+    ui.inbox.unshift({ key: `${n.at}-${Math.random()}`, from: n.from, fromId: n.fromId, dropId: n.dropId, kind: n.kind, text: n.text, at: n.at, reacted: null });
+    ui.inbox.length = Math.min(ui.inbox.length, 20);
+    if (els.inbox.hidden) ui.unread += 1;
+    renderInbox();
+    toast(n.muted ? `${n.from} sent ${what} (hidden while muted)` : `${n.from} dropped ${what} on you! Open 📥 to react.`);
   });
+
+  api.onReaction(({ from, emoji }) => toast(`${from} reacted ${emoji}`, 'success'));
 
   api.onNotice((n) => toast(n.text, n.kind));
 
@@ -1378,12 +1603,16 @@
     els.duration.value = String(Math.round((s.durationMs || 4000) / 1000));
     els.videoSound.checked = s.videoSound !== false;
     ui.position = s.position || 'random';
+    ui.textColor = TEXT_COLORS[s.textColor] ? s.textColor : 'white';
+    els.effectSelect.value = [...els.effectSelect.options].some((o) => o.value === s.effect) ? s.effect : 'pop';
     renderOpacity();
     renderDuration();
     renderPosition();
     renderUpload();
     renderSoundboard();
     renderSoundSelect();
+    renderTextColors();
+    renderText();
     renderThemes();
     switchTab('upload');
 

@@ -635,6 +635,7 @@ input::placeholder {
 /* ============================================================ Main view */
 
 .main-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1780,4 +1781,322 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   font-weight: 400;
   font-size: 13px;
   color: var(--text-2);
+}
+
+/* ============================================================ Text tab */
+
+.text-input {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  resize: none;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 22%, transparent);
+}
+
+.text-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+
+.color-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--dot);
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+
+.color-dot:hover {
+  transform: scale(1.1);
+}
+
+.color-dot[aria-checked='true'] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.text-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-stage {
+  flex: 1;
+  min-height: 70px;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background:
+    repeating-conic-gradient(color-mix(in srgb, var(--panel-2) 70%, transparent) 0 25%, transparent 0 50%) 0 0 / 22px 22px,
+    var(--panel);
+  overflow: hidden;
+}
+
+.text-preview {
+  max-width: 100%;
+  text-align: center;
+  font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', 'Arial Black', sans-serif;
+  font-size: 30px;
+  line-height: 1.08;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  -webkit-text-stroke: 0.05em #000;
+  paint-order: stroke fill;
+}
+
+.text-preview.placeholder {
+  opacity: 0.4;
+}
+
+.text-preview.c-white { color: #fff; }
+.text-preview.c-yellow { color: #ffe14d; }
+.text-preview.c-pink { color: #ff5fb4; }
+.text-preview.c-cyan { color: #4de8ff; }
+.text-preview.c-lime { color: #9dff4d; }
+.text-preview.c-orange { color: #ff9a3d; }
+
+/* ======================================================= Effect + caption */
+
+.control-row > select#effect-select {
+  grid-column: 2 / 4;
+  height: 34px;
+}
+
+.caption-box {
+  grid-column: 2 / 4;
+  min-width: 0;
+}
+
+.caption-box .link-btn {
+  font-size: 13px;
+}
+
+.caption-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.caption-inputs input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.caption-inputs input:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+}
+
+/* ================================================================ Inbox */
+
+.inbox-btn {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.inbox {
+  position: absolute;
+  z-index: 30;
+  top: 62px;
+  left: 10px;
+  right: 10px;
+  max-height: min(420px, calc(100vh - 90px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.inbox[hidden] {
+  display: none;
+}
+
+.inbox-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inbox-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.inbox-list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.inbox-item {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 14px;
+}
+
+.inbox-item + .inbox-item {
+  border-top: 1px solid var(--border);
+}
+
+.inbox-item.is-muted {
+  opacity: 0.6;
+}
+
+.inbox-item .avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--avatar, #6c5f95);
+}
+
+.inbox-body {
+  min-width: 0;
+}
+
+.inbox-line {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-what,
+.inbox-time {
+  color: var(--muted);
+}
+
+.inbox-text {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.react-btn {
+  width: 30px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 90ms ease, background 90ms ease;
+}
+
+.react-btn:hover:not(:disabled) {
+  background: var(--panel-2);
+  transform: scale(1.15);
+}
+
+.react-btn.picked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.react-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.inbox-mute {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.inbox-empty {
+  margin: 0;
+  padding: 18px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Muted friends */
+.chip-muted {
+  margin-left: 2px;
+  font-size: 12px;
+}
+
+.muted-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.muted-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 13px;
 }

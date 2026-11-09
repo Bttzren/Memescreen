@@ -17,11 +17,14 @@ const DEFAULTS = Object.freeze({
   opacity: 1,
   durationMs: 4000,
   position: 'random',
+  effect: 'pop',
+  textColor: 'white',
   videoSound: true,
   // Receiving
   muted: false,
   soundsEnabled: true,
   soundVolume: 0.8,
+  mutedFriends: [], // nicknames (lowercase) whose drops are ignored
   displayId: 'main', // which screen memes appear on
   // App
   theme: 'bubblegum',

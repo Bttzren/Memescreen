@@ -173,6 +173,9 @@ class Connection extends EventEmitter {
       case 'drop':
         this.emit('drop', msg);
         break;
+      case 'reaction':
+        this.emit('reaction', msg);
+        break;
       case 'drop-sent':
         this.settle(msg.ref, msg);
         break;
@@ -194,6 +197,17 @@ class Connection extends EventEmitter {
       }
       default:
         break;
+    }
+  }
+
+  /** Fire-and-forget (reactions). Returns false when not connected. */
+  send(message) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.state.status !== 'connected') return false;
+    try {
+      this.ws.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
     }
   }
 

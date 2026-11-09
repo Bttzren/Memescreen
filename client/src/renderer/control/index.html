@@ -135,6 +135,10 @@
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link" /></svg>
             Invite
           </button>
+          <button id="inbox-btn" class="icon-btn inbox-btn" type="button" aria-expanded="false" title="What friends sent you (react or mute)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-inbox" /></svg>
+            <span id="inbox-badge" class="badge" hidden>0</span>
+          </button>
           <button id="mute-btn" class="icon-btn" type="button" aria-pressed="false" title="Mute incoming memes">
             <svg class="icon icon-bell" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bell" /></svg>
             <svg class="icon icon-bell-off" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bell-off" /></svg>
@@ -153,6 +157,18 @@
 
       <div id="banners" class="banners" aria-live="polite"></div>
 
+      <div id="inbox" class="inbox" hidden>
+        <div class="inbox-head">
+          <strong>Got recently</strong>
+          <span class="inbox-hint">React with an emoji, or mute someone</span>
+          <button type="button" class="icon-btn small" id="inbox-close" title="Close">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <ul id="inbox-list" class="inbox-list"></ul>
+        <p id="inbox-empty" class="inbox-empty">Nothing yet. When friends drop something on you, it shows up here.</p>
+      </div>
+
       <section class="send-to">
         <div class="section-title">Send to <span class="section-hint">(click several friends to pick more than one)</span></div>
         <div id="targets" class="chips" role="group" aria-label="Send to"></div>
@@ -165,6 +181,7 @@
       <nav class="tabs" role="tablist">
         <button type="button" role="tab" class="tab" data-tab="upload" aria-selected="true">📁 Upload</button>
         <button type="button" role="tab" class="tab" data-tab="gifs" aria-selected="false">🔍 GIFs</button>
+        <button type="button" role="tab" class="tab" data-tab="text" aria-selected="false">💬 Text</button>
         <button type="button" role="tab" class="tab" data-tab="sounds" aria-selected="false">🔊 Sounds</button>
       </nav>
 
@@ -216,6 +233,17 @@
           </div>
         </section>
 
+        <!-- Text -->
+        <section id="panel-text" class="panel" role="tabpanel" hidden>
+          <textarea id="text-input" class="text-input" maxlength="140" rows="2" spellcheck="true"
+            placeholder="Type something to throw on their screen… (e.g. GG EZ)"></textarea>
+          <div class="text-row">
+            <div id="text-colors" class="color-dots" role="radiogroup" aria-label="Text color"></div>
+            <span id="text-count" class="text-count">0/140</span>
+          </div>
+          <div class="text-stage"><div id="text-preview" class="text-preview c-white">Your message</div></div>
+        </section>
+
         <!-- Sounds -->
         <section id="panel-sounds" class="panel" role="tabpanel" hidden>
           <p class="panel-hint">Pick a sound to play on their speakers. Click to hear it, double-click to send it right away.</p>
@@ -242,6 +270,28 @@
             <button type="button" role="radio" data-value="random">Random</button>
             <button type="button" role="radio" data-value="center">Center</button>
             <button type="button" role="radio" data-value="fullscreen">Full screen</button>
+          </div>
+        </div>
+        <div class="control-row" data-visual>
+          <label for="effect-select">Entrance</label>
+          <select id="effect-select">
+            <option value="pop">💥 Pop in</option>
+            <option value="slide">⬇️ Drop from the top</option>
+            <option value="bounce">🏀 Bounce</option>
+            <option value="shake">🫨 Shake</option>
+            <option value="spin">🌀 Spin</option>
+            <option value="zoom">🔍 Zoom in</option>
+            <option value="none">Just appear</option>
+          </select>
+        </div>
+        <div class="control-row" data-visual data-caption>
+          <span class="label">Meme text</span>
+          <div class="caption-box">
+            <button type="button" class="link-btn" id="caption-toggle">＋ Add top/bottom text</button>
+            <div id="caption-inputs" class="caption-inputs" hidden>
+              <input id="caption-top" type="text" maxlength="80" placeholder="Top text" autocomplete="off" />
+              <input id="caption-bottom" type="text" maxlength="80" placeholder="Bottom text" autocomplete="off" />
+            </div>
           </div>
         </div>
         <div class="control-row" data-visual>
@@ -316,6 +366,7 @@
             <span>Mute everything friends send</span>
             <input type="checkbox" id="settings-muted" class="switch" />
           </label>
+          <div id="muted-friends" class="muted-friends"></div>
           <p class="setting-help">Right-click the MemeDrop icon by the clock for more: pick which screen memes show on, start with Windows, or quit.</p>
         </section>
 
@@ -334,6 +385,7 @@
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" /></symbol>
       <symbol id="i-leave" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 0 1 7.4 4h9.2a2 2 0 0 1 1.9 1.5L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z" /><path d="M3 13h5l1.5 2.5h5L16 13h5" /></symbol>
     </svg>
 
     <script src="../../shared/hotkey.js"></script>

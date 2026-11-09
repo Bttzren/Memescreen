@@ -49,17 +49,29 @@ test('room codes and nicknames are normalised', () => {
 });
 
 test('normalizeDropOptions clamps into the allowed ranges', () => {
-  assert.deepEqual(V.normalizeDropOptions({ opacity: 0.333, durationMs: 4200.4, position: 'center' }), {
+  assert.deepEqual(V.normalizeDropOptions({ opacity: 0.333, durationMs: 4200.4, position: 'center', effect: 'spin' }), {
     opacity: 0.33,
     durationMs: 4200,
     position: 'center',
+    effect: 'spin',
   });
-  assert.deepEqual(V.normalizeDropOptions({ opacity: 0, durationMs: 99999, position: 'nope' }), {
+  assert.deepEqual(V.normalizeDropOptions({ opacity: 0, durationMs: 99999, position: 'nope', effect: 'explode' }), {
     opacity: 0.1,
     durationMs: 15000,
     position: 'random',
+    effect: 'pop',
   });
-  assert.deepEqual(V.normalizeDropOptions({}), { opacity: 1, durationMs: 4000, position: 'random' });
+  assert.deepEqual(V.normalizeDropOptions({}), { opacity: 1, durationMs: 4000, position: 'random', effect: 'pop' });
+});
+
+test('captions, text colors and reactions are validated the same way as the relay', () => {
+  assert.deepEqual(V.normalizeCaption({ top: ' hi\nthere ', bottom: '' }), { top: 'hi there', bottom: '' });
+  assert.equal(V.normalizeCaption({ top: ' ', bottom: '' }), null);
+  assert.equal(V.normalizeCaption('nope'), null);
+  assert.equal(V.normalizeTextColor('yellow'), 'yellow');
+  assert.equal(V.normalizeTextColor('red; background:url(x)'), 'white');
+  assert.ok(V.REACTIONS.includes('😂'));
+  assert.equal(V.cleanText('a'.repeat(300), V.MAX_TEXT_LENGTH).length, 140);
 });
 
 const VIEW = { viewW: 1920, viewH: 1080 };

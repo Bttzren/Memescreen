@@ -67,6 +67,7 @@ function normalizeDropOptions(opts = {}, limits = DEFAULT_LIMITS, { allowFullCli
     opacity: Math.round(clamp(opts.opacity, limits.minOpacity, limits.maxOpacity, 1) * 100) / 100,
     durationMs: fullClip ? 0 : Math.round(clamp(opts.durationMs, limits.minDurationMs, limits.maxDurationMs, 4000)),
     position: POSITIONS.includes(opts.position) ? opts.position : 'random',
+    effect: relay.normalizeEffect(opts.effect),
   };
 }
 
@@ -80,6 +81,14 @@ module.exports = {
   DEFAULT_LIMITS,
   POSITIONS,
   BUILTIN_SOUNDS: relay.BUILTIN_SOUNDS,
+  EFFECTS: relay.EFFECTS,
+  TEXT_COLORS: relay.TEXT_COLORS,
+  REACTIONS: relay.REACTIONS,
+  MAX_TEXT_LENGTH: relay.MAX_TEXT_LENGTH,
+  cleanText: relay.cleanText,
+  normalizeCaption: relay.normalizeCaption,
+  normalizeTextColor: relay.normalizeTextColor,
+  normalizeEffect: relay.normalizeEffect,
   sniffImageMime: relay.sniffImageMime,
   sniffMediaMime: relay.sniffMediaMime,
   mediaKind: relay.mediaKind,

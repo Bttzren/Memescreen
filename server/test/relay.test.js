@@ -36,7 +36,7 @@ test('joining a room returns a welcome with peers, limits and features', async (
     const welcome = await alice.join('pizza-gang', 'Alice');
     assert.equal(welcome.room, 'PIZZA-GANG', 'room codes are case-insensitive');
     assert.equal(welcome.nickname, 'Alice');
-    assert.equal(welcome.protocol, 2);
+    assert.equal(welcome.protocol, 3);
     assert.deepEqual(welcome.peers, [{ id: welcome.id, nickname: 'Alice' }]);
     assert.equal(welcome.limits.maxImageBytes, 5 * 1024 * 1024);
     assert.deepEqual(welcome.limits.positions, ['random', 'center', 'fullscreen']);
@@ -527,4 +527,70 @@ test('a busy port is reported as an error, not a crash', async () => {
   } finally {
     blocker.close();
   }
+});
+
+test('text drops, meme captions and entrance effects', async () => {
+  await withServer({ limits: { dropsPerWindow: 50 } }, async ({ open }) => {
+    const { a, b } = await trio(open);
+
+    a.send({ type: 'drop', to: b.id, kind: 'text', text: '  hello\n\nthere  ', color: 'yellow', effect: 'shake' });
+    let drop = await b.next('drop');
+    assert.equal(drop.kind, 'text');
+    assert.equal(drop.text, 'hello there', 'whitespace collapsed');
+    assert.equal(drop.color, 'yellow');
+    assert.equal(drop.effect, 'shake');
+    assert.equal(drop.caption, undefined, 'text drops have no caption');
+
+    a.send({ type: 'drop', to: b.id, kind: 'text', text: 'x'.repeat(500), color: 'url(evil)', effect: 'explode' });
+    drop = await b.next('drop');
+    assert.equal(drop.text.length, 140);
+    assert.equal(drop.color, 'white', 'unknown colors fall back');
+    assert.equal(drop.effect, 'pop', 'unknown effects fall back');
+
+    a.send({ type: 'drop', ref: 9, to: b.id, kind: 'text', text: '   ' });
+    const err = await a.next('error');
+    assert.equal(err.code, 'bad_text');
+    assert.equal(err.ref, 9);
+
+    const data = fixture('tiny.png').toString('base64');
+    a.send({ type: 'drop', to: b.id, kind: 'image', data, caption: { top: 'when the code', bottom: 'works first try', extra: 1 } });
+    drop = await b.next('drop');
+    assert.deepEqual(drop.caption, { top: 'when the code', bottom: 'works first try' });
+    assert.equal(drop.effect, 'pop', 'default effect');
+
+    a.send({ type: 'drop', to: b.id, kind: 'gif', url: 'https://media.giphy.com/media/x/giphy.gif', caption: { top: '', bottom: '' } });
+    assert.equal((await b.next('drop')).caption, undefined, 'empty captions are dropped');
+
+    a.send({ type: 'drop', to: b.id, kind: 'image', data, caption: { top: 'y'.repeat(200) } });
+    drop = await b.next('drop');
+    assert.equal(drop.caption.top.length, 80);
+    assert.equal(drop.caption.bottom, '');
+  });
+});
+
+test('reactions go only to the person they are for', async () => {
+  await withServer({ limits: { reactionsPerWindow: 6 } }, async ({ open }) => {
+    const { a, b, c } = await trio(open);
+
+    b.send({ type: 'react', to: a.id, emoji: '😂', dropId: 'abc123' });
+    const r = await a.next('reaction');
+    assert.equal(r.emoji, '😂');
+    assert.equal(r.from.nickname, 'Bob');
+    assert.equal(r.dropId, 'abc123');
+    await c.expectNone('reaction');
+
+    b.send({ type: 'react', to: a.id, emoji: '<script>' });
+    assert.equal((await b.next('error')).code, 'bad_message');
+    b.send({ type: 'react', to: 'nobody', emoji: '🔥' });
+    assert.equal((await b.next('error')).code, 'peer_not_found');
+    b.send({ type: 'react', to: b.id, emoji: '🔥' });
+    assert.equal((await b.next('error')).code, 'peer_not_found', 'no reacting to yourself');
+
+    b.send({ type: 'react', to: a.id, emoji: '🔥', dropId: '../../etc' });
+    assert.equal((await a.next('reaction')).dropId, null, 'odd drop ids are stripped');
+    b.send({ type: 'react', to: a.id, emoji: '❤️' });
+    assert.equal((await a.next('reaction')).emoji, '❤️');
+    b.send({ type: 'react', to: a.id, emoji: '🔥' });
+    assert.equal((await b.next('error')).code, 'rate_limited');
+  });
 });
