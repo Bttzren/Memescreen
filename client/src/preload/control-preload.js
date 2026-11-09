@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('memedrop', {
   trendingGifs: (offset) => ipcRenderer.invoke('gif:trending', { offset }),
   react: (to, emoji, dropId) => ipcRenderer.invoke('drop:react', { to, emoji, dropId }),
   muteFriend: (nickname, muted) => ipcRenderer.invoke('friend:mute', { nickname, muted }),
+  inboxSeen: () => ipcRenderer.invoke('inbox:seen'),
   // Settings
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
   setMuted: (muted) => ipcRenderer.invoke('mute:set', muted),

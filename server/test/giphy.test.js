@@ -24,6 +24,7 @@ test('search calls GIPHY with the key and returns slim items', async () => {
   const item = res.items[0];
   assert.deepEqual(Object.keys(item).sort(), ['full', 'id', 'preview', 'title', 'user']);
   assert.match(item.preview.url, /^https:\/\/media1\.giphy\.com\/.*200w_d\.webp$/);
+  assert.match(item.preview.still, /200w_s\.gif$/, 'still frame for pausing the grid');
   assert.match(item.full.url, /giphy\.webp$/);
   assert.equal(item.full.width, 480);
   assert.equal(item.full.height, 270);

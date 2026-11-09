@@ -40,6 +40,9 @@ const TUNNEL_BIN = process.env.MEMEDROP_TUNNEL_BIN || '';
 if (process.env.MEMEDROP_USER_DATA) app.setPath('userData', path.resolve(process.env.MEMEDROP_USER_DATA));
 // Escape hatch for GPUs that render transparent windows black.
 if (process.env.MEMEDROP_NO_GPU === '1' || process.argv.includes('--no-gpu')) app.disableHardwareAcceleration();
+// Less background work: no media-key hooks or media session (MemeDrop never
+// needs them) and no spare renderer process kept warm "just in case".
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService,SpareRendererForSitePerProcess');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -62,6 +65,10 @@ function run() {
   let role = null; // 'host' | 'join' | null
   let hotkey = { accelerator: Hotkey.DEFAULT_HOTKEY, ok: false };
   let trayHintShown = false;
+  // What friends sent recently (the 📥 inbox). Lives here so it survives the
+  // window being closed (which frees the window's memory).
+  const recentIncoming = [];
+  let unreadIncoming = 0;
   let pendingInvite = findDeepLink(process.argv);
   const connection = new Connection();
 
@@ -154,7 +161,8 @@ function run() {
     for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
       screen.on(event, () => tray.update({}));
     }
-    createControlWindow();
+    // Started with Windows: stay in the tray without loading the window at all.
+    if (!START_HIDDEN) createControlWindow();
     registerIpc();
 
     connection.on('state', (state) => {
@@ -239,14 +247,20 @@ function run() {
         autoplayPolicy: 'no-user-gesture-required',
       },
     });
+    controlOutbox = [];
+    controlWin.webContents.on('did-finish-load', () => {
+      const queued = controlOutbox.splice(0);
+      for (const [channel, payload] of queued) sendToControl(channel, payload);
+      sendState();
+    });
     controlWin.loadFile(path.join(__dirname, '..', 'renderer', 'control', 'index.html'));
     controlWin.once('ready-to-show', () => {
-      if (!START_HIDDEN) controlWin.show();
+      if (controlWin) controlWin.show();
     });
-    controlWin.on('close', (event) => {
+    controlWin.on('close', () => {
       if (quitting) return;
-      event.preventDefault();
-      controlWin.hide();
+      // The window really closes (freeing ~100 MB); MemeDrop keeps running in
+      // the tray and opens a fresh window when needed.
       if (!trayHintShown) {
         trayHintShown = true;
         tray.notify('MemeDrop is still running', 'Memes will keep showing up. Right-click the tray icon to mute or quit.');
@@ -258,14 +272,26 @@ function run() {
   }
 
   function showControlWindow() {
-    if (!controlWin) createControlWindow();
+    if (!controlWin) {
+      createControlWindow(); // shows itself once loaded
+      return;
+    }
     if (controlWin.isMinimized()) controlWin.restore();
     controlWin.show();
     controlWin.focus();
   }
 
+  // Messages for a window that is still loading wait until it's ready
+  // (e.g. an invite link that opened a fresh window).
+  let controlOutbox = [];
+
   function sendToControl(channel, payload) {
-    if (controlWin && !controlWin.isDestroyed()) controlWin.webContents.send(channel, payload);
+    if (!controlWin || controlWin.isDestroyed()) return;
+    if (controlWin.webContents.isLoading()) {
+      if (channel !== 'state') controlOutbox.push([channel, payload]);
+      return;
+    }
+    controlWin.webContents.send(channel, payload);
   }
 
   // -------------------------------------------------------------------- state
@@ -460,6 +486,7 @@ function run() {
     if (isFriendMuted(sender.name)) return; // you asked not to see this person's drops
     const s = settings.get();
     const notice = {
+      key: crypto.randomBytes(6).toString('hex'),
       from: sender.name,
       fromId: sender.id,
       dropId: typeof msg.dropId === 'string' ? msg.dropId : null,
@@ -467,7 +494,11 @@ function run() {
       text: msg.kind === 'text' ? V.cleanText(msg.text, V.MAX_TEXT_LENGTH) : '',
       muted: s.muted,
       at: Date.now(),
+      reacted: null,
     };
+    recentIncoming.unshift(notice);
+    recentIncoming.length = Math.min(recentIncoming.length, 20);
+    unreadIncoming += 1;
     if (s.muted) {
       sendToControl('incoming', notice);
       return;
@@ -512,7 +543,14 @@ function run() {
       platform: process.platform,
       suggestedRoom: settings.get().hostRoom || randomRoomName(),
       themes: THEMES,
+      inbox: recentIncoming,
+      unread: unreadIncoming,
     }));
+
+    ipcMain.handle('inbox:seen', () => {
+      unreadIncoming = 0;
+      return { ok: true };
+    });
 
     ipcMain.handle('room:host', (_e, input = {}) => {
       const nickname = V.normalizeNickname(input.nickname);
@@ -578,7 +616,10 @@ function run() {
     ipcMain.handle('drop:react', (_e, { to, emoji, dropId } = {}) => {
       if (!V.REACTIONS.includes(emoji) || typeof to !== 'string') return { ok: false, error: 'Unknown reaction.' };
       const sent = connection.send({ type: 'react', to, emoji, dropId: typeof dropId === 'string' ? dropId : undefined });
-      return sent ? { ok: true } : { ok: false, error: "You're not connected right now." };
+      if (!sent) return { ok: false, error: "You're not connected right now." };
+      const entry = recentIncoming.find((n) => n.dropId && n.dropId === dropId);
+      if (entry) entry.reacted = emoji;
+      return { ok: true };
     });
 
     ipcMain.handle('friend:mute', (_e, { nickname, muted } = {}) => setFriendMuted(nickname, Boolean(muted)));

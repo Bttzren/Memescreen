@@ -832,7 +832,16 @@
       title: item.user ? `${item.title} · by ${item.user}` : item.title,
     });
     if (item.preview.width && item.preview.height) btn.style.aspectRatio = `${item.preview.width} / ${item.preview.height}`;
-    const img = el('img', { loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', alt: item.title, src: item.preview.url });
+    const still = typeof item.preview.still === 'string' ? item.preview.still : null;
+    const img = el('img', {
+      loading: 'lazy',
+      decoding: 'async',
+      referrerpolicy: 'no-referrer',
+      alt: item.title,
+      'data-anim': item.preview.url,
+      'data-still': still,
+      src: still && !gifsAnimating() ? still : item.preview.url,
+    });
     btn.append(img);
     btn.addEventListener('click', (event) => {
       // event.detail is 2 on the second click of a double-click: keep it selected.
@@ -886,9 +895,24 @@
   let previewCtx = null;
   let previewHandle = null;
 
+  let previewCtxTimer = null;
+
   function stopPreview() {
     if (previewHandle) previewHandle.stop();
     previewHandle = null;
+  }
+
+  /**
+   * An open AudioContext keeps an audio thread (and Chromium's audio process)
+   * busy, so close it a moment after the last preview finishes.
+   */
+  function releasePreviewAudioLater(handle) {
+    clearTimeout(previewCtxTimer);
+    const ms = ((handle && handle.duration) || 0) * 1000 + 1500;
+    previewCtxTimer = setTimeout(() => {
+      if (previewCtx && previewCtx.state !== 'closed') previewCtx.close().catch(() => {});
+      previewCtx = null;
+    }, ms);
   }
 
   function previewSound(pick, tile) {
@@ -904,6 +928,7 @@
       if (!previewCtx || previewCtx.state === 'closed') previewCtx = new AudioContext();
       previewCtx.resume().catch(() => {});
       previewHandle = Sounds.play(previewCtx, pick, null, { volume });
+      releasePreviewAudioLater(previewHandle);
     }
     if (tile) {
       tile.classList.remove('playing');
@@ -1196,6 +1221,26 @@
     if (!res.ok) toast(res.error, 'error');
   });
 
+  // ============================================= pause GIFs when not looking
+
+  // Two dozen animated GIFs cost real CPU/GPU. While MemeDrop isn't the
+  // active window, the grid shows still frames instead.
+  function gifsAnimating() {
+    return document.hasFocus() && document.visibilityState === 'visible';
+  }
+
+  function syncGifAnimation() {
+    const animate = gifsAnimating();
+    for (const img of els.gifGrid.querySelectorAll('img[data-still]')) {
+      const want = animate ? img.dataset.anim : img.dataset.still;
+      if (img.getAttribute('src') !== want) img.setAttribute('src', want);
+    }
+  }
+
+  window.addEventListener('focus', syncGifAnimation);
+  window.addEventListener('blur', syncGifAnimation);
+  document.addEventListener('visibilitychange', syncGifAnimation);
+
   // ================================================================== text
 
   function renderTextColors() {
@@ -1273,6 +1318,7 @@
     els.inboxBtn.setAttribute('aria-expanded', String(open));
     if (open) {
       ui.unread = 0;
+      api.inboxSeen();
       renderInbox();
     }
     renderInboxBadge();
@@ -1542,6 +1588,7 @@
     stopPreview();
     if (!previewCtx || previewCtx.state === 'closed') previewCtx = new AudioContext();
     previewHandle = Sounds.play(previewCtx, 'ding', null, { volume: Number(els.soundVolume.value) / 100 });
+    releasePreviewAudioLater(previewHandle);
   });
   els.settingsMuted.addEventListener('change', () => api.setMuted(els.settingsMuted.checked));
 
@@ -1567,9 +1614,10 @@
 
   api.onIncoming((n) => {
     const what = KIND_WORDS[n.kind] || 'something';
-    ui.inbox.unshift({ key: `${n.at}-${Math.random()}`, from: n.from, fromId: n.fromId, dropId: n.dropId, kind: n.kind, text: n.text, at: n.at, reacted: null });
+    ui.inbox.unshift({ ...n });
     ui.inbox.length = Math.min(ui.inbox.length, 20);
     if (els.inbox.hidden) ui.unread += 1;
+    else api.inboxSeen();
     renderInbox();
     toast(n.muted ? `${n.from} sent ${what} (hidden while muted)` : `${n.from} dropped ${what} on you! Open 📥 to react.`);
   });
@@ -1596,6 +1644,8 @@
     ui.version = boot.version;
     ui.platform = boot.platform;
     ui.suggestedRoom = boot.suggestedRoom;
+    ui.inbox = Array.isArray(boot.inbox) ? boot.inbox.map((n) => ({ ...n })) : [];
+    ui.unread = Number(boot.unread) || 0;
     els.about.textContent = `MemeDrop ${boot.version}`;
 
     const s = boot.settings;

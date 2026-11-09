@@ -126,6 +126,11 @@ function makeGif(id) {
         size: '2000000',
         webp_size: '900000',
       },
+      fixed_width_still: {
+        url: `https://media1.giphy.com/media/${id}/200w_s.gif`,
+        width: '200',
+        height: '113',
+      },
       fixed_width_downsampled: {
         url: `https://media1.giphy.com/media/${id}/200w_d.gif`,
         webp: `https://media1.giphy.com/media/${id}/200w_d.webp`,

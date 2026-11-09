@@ -4,6 +4,9 @@ const path = require('node:path');
 const { BrowserWindow, screen, ipcMain } = require('electron');
 
 const MAX_ON_SCREEN = 6;
+// After this long with nothing to show, the overlay window is closed to free
+// its memory (~80–100 MB). The next meme recreates it in a fraction of a second.
+const IDLE_CLOSE_MS = Number(process.env.MEMEDROP_OVERLAY_IDLE_MS) || 60_000;
 
 /**
  * The see-through, click-through, always-on-top window that memes appear in.
@@ -22,6 +25,7 @@ class OverlayManager {
     this.queue = [];
     this.activeCount = 0;
     this.hideTimer = null;
+    this.idleTimer = null;
 
     ipcMain.on('overlay:count', (event, count) => {
       if (!this.win || event.sender !== this.win.webContents) return;
@@ -31,6 +35,7 @@ class OverlayManager {
         // Small grace period so back-to-back drops don't flicker the window.
         this.hideTimer = setTimeout(() => {
           if (this.activeCount === 0 && this.win && !this.win.isDestroyed()) this.win.hide();
+          this.scheduleIdleClose();
         }, 250);
       }
     });
@@ -94,6 +99,7 @@ class OverlayManager {
     });
 
     this.win.loadFile(path.join(__dirname, '..', 'renderer', 'overlay', 'index.html'));
+    this.scheduleIdleClose(); // the warm-up window at startup also goes away if unused
     return this.win;
   }
 
@@ -132,6 +138,7 @@ class OverlayManager {
    * position, from, title, width, height, preview, sound, videoSound, volume }.
    */
   show(drop) {
+    clearTimeout(this.idleTimer);
     this.create();
     if (!this.ready) {
       this.queue.push(drop);
@@ -141,9 +148,17 @@ class OverlayManager {
     this.deliver(drop);
   }
 
+  scheduleIdleClose() {
+    clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      if (this.activeCount === 0 && this.queue.length === 0 && this.win && !this.win.isVisible()) this.destroy();
+    }, IDLE_CLOSE_MS);
+  }
+
   deliver(drop) {
     if (!this.win || this.win.isDestroyed()) return;
     clearTimeout(this.hideTimer);
+    clearTimeout(this.idleTimer);
     this.fitToDisplay();
     if (!this.win.isVisible()) this.win.showInactive();
     this.win.setAlwaysOnTop(true, 'screen-saver');
@@ -158,11 +173,16 @@ class OverlayManager {
     if (!this.win || this.win.isDestroyed()) return;
     this.win.hide();
     this.win.webContents.send('overlay:clear');
+    this.scheduleIdleClose();
   }
 
   destroy() {
+    clearTimeout(this.idleTimer);
+    clearTimeout(this.hideTimer);
     if (this.win && !this.win.isDestroyed()) this.win.destroy();
     this.win = null;
+    this.ready = false;
+    this.activeCount = 0;
   }
 }
 

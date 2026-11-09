@@ -171,10 +171,12 @@ function normalizeGif(gif) {
   if (!preview || !full) return null;
   const original = gif.images.original || {};
   const user = gif.user && (gif.user.display_name || gif.user.username);
+  // A still frame lets the app stop animating the grid while you're not looking.
+  const still = rendition(gif.images.fixed_width_still, { preferWebp: false });
   return {
     id: String(gif.id || ''),
     title: cleanText(gif.title || '', 100) || 'GIF',
-    preview: { url: preview.url, width: preview.width, height: preview.height },
+    preview: { url: preview.url, width: preview.width, height: preview.height, ...(still ? { still: still.url } : {}) },
     full: {
       url: full.url,
       width: toInt(original.width) || full.width,

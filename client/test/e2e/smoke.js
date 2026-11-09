@@ -159,7 +159,8 @@ async function main() {
     executablePath: exe || require('electron'),
     args,
     cwd: CLIENT,
-    env: { ...process.env, MEMEDROP_USER_DATA: userData, MEMEDROP_TUNNEL_BIN: FAKE_TUNNEL },
+    // Keep the overlay window alive between steps (it normally closes after 60 s idle).
+    env: { ...process.env, MEMEDROP_USER_DATA: userData, MEMEDROP_TUNNEL_BIN: FAKE_TUNNEL, MEMEDROP_OVERLAY_IDLE_MS: '600000' },
     timeout: 60000,
   });
   app.process().stderr.on('data', (d) => {

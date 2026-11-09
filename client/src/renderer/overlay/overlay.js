@@ -18,8 +18,22 @@
     return audioCtx;
   }
 
+  let audioIdleTimer = null;
+
   function report() {
-    window.overlay.reportCount(items.size + fading);
+    const count = items.size + fading;
+    window.overlay.reportCount(count);
+    // Nothing on screen: close the audio context so Chromium's audio thread
+    // (and the audio service process) can go idle.
+    clearTimeout(audioIdleTimer);
+    if (count === 0 && audioCtx) {
+      audioIdleTimer = setTimeout(() => {
+        if (items.size + fading === 0 && audioCtx) {
+          audioCtx.close().catch(() => {});
+          audioCtx = null;
+        }
+      }, 2000);
+    }
   }
 
   /** Stop timers, sounds and videos for a drop and free its memory. */
