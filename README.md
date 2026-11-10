@@ -2,16 +2,16 @@
 
 Drop memes, GIFs, videos, sounds and messages straight onto your friends' screens.
 
-One friend clicks **Host a room** and sends everyone the invite link. Everyone else clicks it (or pastes it into MemeDrop) and they're in. Pick a friend, a few friends, or everyone, then drop an image, video, GIF, sound or a big text message. Friends can react with an emoji, and it pops up on your screen. It pops up on their screen over whatever they're doing, then disappears.
+One friend clicks **Host a room** and sends everyone the invite link. Everyone else clicks it (or pastes it into MemeDrop) and they're in. Pick a friend, a few friends, or everyone, then drop an image, video, GIF, sound or a big text message. It pops up on their screen over whatever they're doing, then disappears. They can react with an emoji, and it pops up on yours.
 
 **No terminal, no config files, no accounts.** Everything is done by clicking in the app.
 
 <p align="center">
-  <img src="docs/app.png" alt="MemeDrop: the welcome screen, sending a GIF with a sound to two friends, and the soundboard" width="760">
+  <img src="docs/app.png" alt="MemeDrop: the welcome screen, sending a GIF with an air horn to two friends, and the Text tab with Make it rain" width="760">
 </p>
 <p align="center">
-  <img src="docs/overlay.png" alt="A meme dropped on someone's screen, floating over their apps with the sender's name in the corner" width="640">
-  <br><sub>What your friend sees: the meme floats over their apps, and their mouse clicks pass straight through it.</sub>
+  <img src="docs/overlay.png" alt="A captioned meme and a GG EZ message floating over someone's apps, with emoji reactions in the corner" width="640">
+  <br><sub>What your friend sees: memes and messages float over their apps, and their mouse clicks pass straight through.</sub>
 </p>
 
 ---
@@ -22,7 +22,7 @@ One friend clicks **Host a room** and sends everyone the invite link. Everyone e
 
 Download the installer, run it, and MemeDrop opens. There's no admin password and nothing to set up.
 
-- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup 1.2.0.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
+- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup 1.3.0.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
 - **"Windows protected your PC"?** The installer isn't code-signed, because certificates cost money. Click **More info → Run anyway**.
 
 ### 2. One person hosts
@@ -51,7 +51,8 @@ Anyone in the room can click **Invite** (top bar) to copy the link and bring mor
 2. Pick what to drop:
    - **📁 Upload**: drop an image or video on the box, click to browse, or press **Ctrl+V** to paste a screenshot. Images: PNG, JPG, GIF, WebP up to 5 MB. Videos: MP4 or WebM up to 20 MB.
    - **🔍 GIFs**: trending GIFs and search, powered by GIPHY. Click to select; double-click to send instantly.
-   - **💬 Text**: type a message (up to 140 characters), pick a color, and press **Enter**. It lands as big outlined meme text.
+   - **💬 Text**: type a message (up to 140 characters), pick a color, and press **Enter**. It lands as big outlined meme text. Tick **🌧️ Make it rain** and a short message or emoji (💀, GG, F) pours down their whole screen instead.
+   - **⭐ Saved**: your favorites. Pick an image, video or GIF, click **⭐ Save**, and it's here next time, a click away (double-click sends it right away). Saved memes stay on your PC.
    - **🔊 Sounds**: a soundboard (air horn, sad trombone, drum roll, ta-da…), or **upload your own** MP3/WAV/OGG/M4A. Click to hear it, double-click to send it straight away.
 3. Adjust:
    - **Opacity**: from faint (10%) to fully solid (100%).
@@ -61,6 +62,10 @@ Anyone in the room can click **Invite** (top bar) to copy the link and bring mor
    - **Meme text**: click **Add top/bottom text** to put classic meme captions on any image, GIF or video.
    - **Sound**: add a sound effect to any image, GIF or message. Videos can also play their own sound.
 4. **Preview on me** shows it on your own screen first. **Drop it!** (or **Ctrl+Enter**) sends it.
+
+<p align="center">
+  <img src="docs/features.png" alt="Adding meme text and a spin entrance to an upload, the Saved tab, and the inbox with emoji reactions" width="760">
+</p>
 
 ## Getting memes
 
@@ -75,7 +80,8 @@ Drops pop up with the sender's name in the corner, then fade away. They never st
 | 🔔 button | Mute everything friends send. |
 | ⚙️ **Settings → Sounds** | Turn friends' sounds off or set the volume. |
 | ⚙️ **Settings → Colors** | Six color themes: Bubblegum, Ocean, Lime, Sunset, Midnight, Light. |
-| Tray icon (by the clock) | Right-click for Mute, Play sounds, Clear screen, **Show memes on** (pick a monitor), **Start with Windows**, and Quit. |
+| ⚙️ **Settings → Incoming memes** | **Show on**: pick which screen memes appear on (if you have more than one). **Start MemeDrop with Windows**: it starts quietly by the clock. |
+| Tray icon (by the clock) | Right-click for the same quick switches, and **Quit**. |
 
 <p align="center">
   <img src="docs/themes.png" alt="MemeDrop in the Ocean, Lime and Light themes, and the Settings panel" width="760">
@@ -121,7 +127,7 @@ There are no accounts, so anyone with the invite link can join. Only share it wi
 - **Sizes:** images 5 MB, videos 20 MB, uploaded sounds 3 MB. Whole-clip videos and sounds stop after 60 s.
 - **GIFs** can only come from GIPHY, and the overlay window is locked down so it can't load anything else.
 - **Spam limits:** about 8 drops per 10 seconds per person, 12 reactions per 10 seconds, 20 GIF searches a minute, 30 people per room, and at most 6 things on screen at once.
-- **Messages and captions** are plain text (140 and 80 characters). Colors and effects come from a fixed list, so nobody can sneak styling or links into your overlay.
+- **Messages and captions** are plain text (140 and 80 characters; rain only for 20 or fewer). Colors and effects come from a fixed list, so nobody can sneak styling or links into your overlay.
 - **The app itself:** its pages run sandboxed without Node access, can't open pop-ups or navigate away, and camera/microphone/other permission requests are always denied.
 
 ---
