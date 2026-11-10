@@ -66,7 +66,7 @@ function friend(port, room, nickname) {
     ws.once('open', async () => {
       ws.send(JSON.stringify({ type: 'join', room, nickname }));
       const welcome = await next('welcome');
-      resolve({ ws, next, id: welcome.id, send: (m) => ws.send(JSON.stringify(m)) });
+      resolve({ ws, next, id: welcome.id, peers: welcome.peers, send: (m) => ws.send(JSON.stringify(m)) });
     });
   });
 }
@@ -232,7 +232,7 @@ async function main() {
     }
 
     // Bob → Alice: fully opaque, centred.
-    const overlay = await getWindow(app, 'overlay/index.html');
+    let overlay = await getWindow(app, 'overlay/index.html');
     const data = fs.readFileSync(SMOKE_PNG).toString('base64');
     bob.send({ type: 'drop', to: 'all', kind: 'image', data, opacity: 1, durationMs: 15000, position: 'center' });
     await overlay.waitForSelector('.drop.in', { timeout: 10000 });
@@ -307,6 +307,49 @@ async function main() {
     await control.evaluate(() => window.memedrop.clearScreen());
     log('PASS: video drop plays');
 
+    // Text drop with an entrance effect.
+    bob.send({ type: 'drop', to: 'all', kind: 'text', text: 'GG EZ', color: 'yellow', effect: 'bounce', durationMs: 2000, position: 'center' });
+    await overlay.waitForSelector('.drop--text.fx-bounce.in .text-card', { timeout: 10000 });
+    assert.equal(await overlay.$eval('.text-card', (c) => c.textContent), 'GG EZ');
+    // Meme captions on an image.
+    bob.send({ type: 'drop', to: 'all', kind: 'image', data, caption: { top: 'top text', bottom: 'bottom text' }, effect: 'spin', durationMs: 2000, position: 'center' });
+    await overlay.waitForSelector('.drop.fx-spin .caption--bottom', { timeout: 10000 });
+    assert.deepEqual(await overlay.$$eval('.caption', (c) => c.map((x) => x.textContent)), ['top text', 'bottom text']);
+    // Make it rain.
+    bob.send({ type: 'drop', to: 'all', kind: 'text', text: '💀', rain: true, durationMs: 2000 });
+    await overlay.waitForSelector('.drop--rain .rain-bit', { timeout: 10000 });
+    assert.ok((await overlay.$$eval('.rain-bit', (b) => b.length)) >= 14, 'rain fills the screen');
+    // A reaction from Bob pops up in the corner.
+    const aliceId = bob.peers.find((p) => p.nickname === 'Alice').id;
+    bob.send({ type: 'react', to: aliceId, emoji: '😂' });
+    await overlay.waitForSelector('.reaction.in', { timeout: 10000 });
+    assert.equal(await overlay.$eval('.reaction', (r) => r.textContent), '😂Bob');
+    await control.evaluate(() => window.memedrop.clearScreen());
+    await waitFor(async () => (await overlayState(app)).visible === false, 'overlay hidden after clearing', 3000);
+    log('PASS: text, captions, rain and reactions');
+
+    // To save memory the overlay window closes itself after a minute with
+    // nothing to show. The next drop has to bring it back, see-through and on top.
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const w of BrowserWindow.getAllWindows()) if (w.webContents.getURL().includes('overlay')) w.destroy();
+    });
+    await waitFor(async () => !app.windows().some((p) => p.url().includes('overlay/index.html')), 'overlay window closed', 5000);
+    bob.send({ type: 'drop', to: 'all', kind: 'image', data, opacity: 1, durationMs: 15000, position: 'center', effect: 'none' });
+    await waitFor(async () => app.windows().some((p) => p.url().includes('overlay/index.html')), 'overlay window comes back', 10000);
+    overlay = app.windows().find((p) => p.url().includes('overlay/index.html'));
+    await overlay.waitForSelector('.drop.in', { timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 700));
+    const reborn = await overlayState(app);
+    assert.equal(reborn.visible, true);
+    assert.equal(reborn.onTop, true);
+    if (PIXEL_CHECKS) {
+      const cold = await captureScreen(app, '5-overlay-reopened', POINTS);
+      assert.ok(near(cold.samples[0], MAGENTA, 12), `centre should be the meme after the overlay reopened, got ${cold.samples[0]}`);
+      assert.ok(near(cold.samples[1], before.samples[1], 6), 'corner still shows through after the overlay reopened');
+    }
+    await control.evaluate(() => window.memedrop.clearScreen());
+    log('PASS: overlay comes back after closing itself');
+
     // Host a room inside the app ("Friends anywhere", with a stand-in tunnel helper).
     await control.evaluate(() => window.memedrop.leaveRoom());
     await control.waitForSelector('#welcome-view:not([hidden])');
@@ -331,8 +374,33 @@ async function main() {
     guest.send({ type: 'drop', to: 'all', kind: 'image', data, opacity: 1, durationMs: 3000, position: 'random' });
     await overlay.waitForSelector('.drop.in', { timeout: 10000 });
     assert.equal(await overlay.$eval('.drop .tag', (t) => t.textContent), 'Guest');
-    guest.ws.terminate();
     log('PASS: hosting inside the app works');
+
+    // Through the window: type a message, then save a meme and send it again from the ⭐ tab.
+    await control.click('.tab[data-tab="text"]');
+    await control.fill('#text-input', 'hello from the window');
+    await control.press('#text-input', 'Enter');
+    const typed = await guest.next('drop');
+    assert.equal(typed.kind, 'text');
+    assert.equal(typed.text, 'hello from the window');
+    await control.click('.tab[data-tab="upload"]');
+    await control.setInputFiles('#file-input', SMOKE_PNG);
+    await control.waitForFunction(() => {
+      const img = document.querySelector('#dz-media img');
+      return img && img.naturalWidth > 0;
+    });
+    await control.click('#upload-save');
+    await control.waitForFunction(() => document.getElementById('upload-save').textContent.includes('Saved'));
+    await control.click('#upload-clear');
+    await control.click('.tab[data-tab="favs"]');
+    await control.click('.fav-item');
+    await control.waitForFunction(() => !document.getElementById('send-btn').disabled);
+    await control.click('#send-btn');
+    const resent = await guest.next('drop');
+    assert.equal(resent.kind, 'image');
+    assert.equal(resent.data, data, 'the saved meme is sent exactly as it was');
+    guest.ws.terminate();
+    log('PASS: text from the window, saved memes');
 
     log('ALL GOOD');
   } finally {
