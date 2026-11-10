@@ -44,7 +44,18 @@
     aloneHint: $('alone-hint'),
     aloneInvite: $('alone-invite'),
     tabs: $$('.tab'),
-    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), text: $('panel-text'), sounds: $('panel-sounds') },
+    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), text: $('panel-text'), sounds: $('panel-sounds'), favs: $('panel-favs') },
+    uploadSave: $('upload-save'),
+    gifSave: $('gif-save'),
+    favGrid: $('fav-grid'),
+    favEmpty: $('fav-empty'),
+    textRain: $('text-rain'),
+    textRainLabel: $('text-rain-label'),
+    textRainHint: $('text-rain-hint'),
+    displayRow: $('display-row'),
+    displaySelect: $('display-select'),
+    startupRow: $('startup-row'),
+    startupToggle: $('startup-toggle'),
     inboxBtn: $('inbox-btn'),
     inboxBadge: $('inbox-badge'),
     inbox: $('inbox'),
@@ -154,6 +165,9 @@
     recording: false,
     leaveArmed: null,
     textColor: 'white',
+    favs: [], // saved memes: { id, type: 'file'|'gif', ... , thumbUrl }
+    favsLoaded: false,
+    fav: null, // selected saved meme: { item, bytes? }
     inbox: [], // newest first: { key, from, fromId, dropId, kind, text, at, reacted }
     unread: 0,
   };
@@ -560,13 +574,21 @@
     for (const [key, panel] of Object.entries(els.panels)) panel.hidden = key !== name;
     for (const row of $$('[data-visual]')) row.hidden = name === 'sounds';
     for (const row of $$('[data-caption]')) row.hidden = name === 'sounds' || name === 'text';
-    els.videoOptions.hidden = !(name === 'upload' && ui.upload && ui.upload.kind === 'video');
+    els.videoOptions.hidden = !videoSelected();
     if (name === 'gifs' && !ui.gifLoadedOnce) loadGifs();
+    if (name === 'favs' && !ui.favsLoaded) loadFavs();
     if (name === 'text') setTimeout(() => els.textInput.focus(), 0);
     updateSummary();
   }
 
   for (const tab of els.tabs) tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+
+  /** Is the thing about to be dropped a video (uploaded or saved)? */
+  function videoSelected() {
+    if (ui.tab === 'upload') return Boolean(ui.upload && ui.upload.kind === 'video');
+    if (ui.tab === 'favs') return Boolean(ui.fav && ui.fav.item.type === 'file' && ui.fav.item.kind === 'video');
+    return false;
+  }
 
   // ================================================================ upload
 
@@ -630,7 +652,9 @@
     } else {
       els.dzMedia.replaceChildren();
     }
-    els.videoOptions.hidden = !(ui.tab === 'upload' && u && u.kind === 'video');
+    els.videoOptions.hidden = !videoSelected();
+    els.uploadSave.textContent = u && u.saved ? '⭐ Saved' : '⭐ Save';
+    els.uploadSave.disabled = Boolean(u && u.saved);
     updateSummary();
   }
 
@@ -857,6 +881,9 @@
   function selectGif(item) {
     ui.gif = item;
     for (const node of els.gifGrid.children) node.setAttribute('aria-pressed', String(Boolean(ui.gif && node.dataset.id === ui.gif.id)));
+    els.gifSave.hidden = !ui.gif;
+    els.gifSave.textContent = '⭐ Save this GIF';
+    els.gifSave.disabled = false;
     updateSummary();
   }
 
@@ -1075,7 +1102,7 @@
   }
 
   function renderDuration() {
-    const full = els.videoFull.checked && ui.upload && ui.upload.kind === 'video' && ui.tab === 'upload';
+    const full = els.videoFull.checked && videoSelected();
     els.durationOut.textContent = full ? 'clip' : `${els.duration.value}s`;
     els.duration.disabled = Boolean(full);
     setRangeFill(els.duration);
@@ -1118,9 +1145,19 @@
     const sound = soundPayload(ui.attachSound);
     if (ui.tab === 'text') {
       const text = els.textInput.value.trim();
-      return text ? { kind: 'text', text, color: ui.textColor, ...base, sound } : null;
+      return text ? { kind: 'text', text, color: ui.textColor, rain: rainOn(), ...base, sound } : null;
     }
     base.caption = captionPayload();
+    if (ui.tab === 'favs') {
+      if (!ui.fav) return null;
+      const f = ui.fav.item;
+      if (f.type === 'gif') return { kind: 'gif', url: f.url, width: f.width, height: f.height, title: f.title, ...base, sound };
+      if (!ui.fav.bytes) return null; // still loading from disk
+      if (f.kind === 'video') {
+        return { kind: 'video', bytes: ui.fav.bytes, ...base, durationMs: els.videoFull.checked ? 0 : base.durationMs, videoSound: els.videoSound.checked, sound };
+      }
+      return { kind: 'image', bytes: ui.fav.bytes, ...base, sound };
+    }
     if (ui.tab === 'upload') {
       if (!ui.upload) return null;
       if (ui.upload.kind === 'video') {
@@ -1161,6 +1198,9 @@
       const text = els.textInput.value.trim();
       const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
       parts = text ? [['strong', `“${text.length > 40 ? `${text.slice(0, 40)}…` : text}”`], ...extra, ' → ', ['strong', target]] : ['Type a message to drop.'];
+    } else if (ui.tab === 'favs') {
+      const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
+      parts = ui.fav ? [['strong', ui.fav.item.type === 'gif' ? ui.fav.item.title : ui.fav.item.name], ...extra, ' → ', ['strong', target]] : ['Pick one of your saved memes to drop.'];
     } else if (ui.tab === 'sounds') {
       parts = ui.soundPick ? [['strong', soundName(ui.soundPick)], ' → ', ['strong', target]] : ['Pick a sound to play on their speakers.'];
     } else {
@@ -1229,7 +1269,13 @@
     return document.hasFocus() && document.visibilityState === 'visible';
   }
 
+  let closing = false;
+  window.addEventListener('beforeunload', () => {
+    closing = true; // the window is going away: don't start loading still frames
+  });
+
   function syncGifAnimation() {
+    if (closing) return;
     const animate = gifsAnimating();
     for (const img of els.gifGrid.querySelectorAll('img[data-still]')) {
       const want = animate ? img.dataset.anim : img.dataset.still;
@@ -1240,6 +1286,146 @@
   window.addEventListener('focus', syncGifAnimation);
   window.addEventListener('blur', syncGifAnimation);
   document.addEventListener('visibilitychange', syncGifAnimation);
+
+  // ================================================================= saved
+
+  /** A small picture of the image/video being previewed, for the saved grid. */
+  async function makeThumb(media) {
+    try {
+      const w = media.videoWidth || media.naturalWidth;
+      const h = media.videoHeight || media.naturalHeight;
+      if (!w || !h) return null;
+      const scale = Math.min(1, 220 / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      canvas.getContext('2d').drawImage(media, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.8));
+      return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadFavs() {
+    const list = await api.favList();
+    for (const old of ui.favs) if (old.thumbUrl) URL.revokeObjectURL(old.thumbUrl);
+    ui.favs = list.map((f) => ({ ...f, thumbUrl: f.thumb ? URL.createObjectURL(new Blob([f.thumb], { type: 'image/webp' })) : null, thumb: undefined }));
+    ui.favsLoaded = true;
+    if (ui.fav && !ui.favs.some((f) => f.id === ui.fav.item.id)) ui.fav = null;
+    renderFavs();
+  }
+
+  async function selectFav(item) {
+    if (!item) {
+      ui.fav = null;
+    } else if (item.type === 'gif') {
+      ui.fav = { item };
+    } else {
+      ui.fav = { item, bytes: null };
+      renderFavs();
+      const bytes = await api.favRead(item.id);
+      if (!ui.fav || ui.fav.item.id !== item.id) return; // picked something else meanwhile
+      if (!bytes) {
+        toast("That saved meme's file is missing, so it was removed.", 'error');
+        await api.favRemove(item.id);
+        ui.fav = null;
+        await loadFavs();
+        return;
+      }
+      ui.fav.bytes = bytes;
+    }
+    renderFavs();
+  }
+
+  function renderFavs() {
+    els.favEmpty.hidden = ui.favs.length > 0;
+    els.favGrid.replaceChildren(
+      ...ui.favs.map((f) => {
+        const label = f.type === 'gif' ? f.title : f.name;
+        const picked = Boolean(ui.fav && ui.fav.item.id === f.id);
+        const src = f.type === 'gif' ? f.stillUrl || f.previewUrl : f.thumbUrl;
+        const picture = src
+          ? el('img', { src, alt: label, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' })
+          : el('span', { class: 'fav-blank', text: f.kind === 'video' ? '🎬' : '🖼️' });
+        const badge = f.type === 'gif' ? 'GIF' : f.kind === 'video' ? '🎬' : null;
+        const tile = el(
+          'div',
+          {
+            class: 'fav-item',
+            role: 'button',
+            tabindex: '0',
+            'aria-pressed': String(picked),
+            'data-id': f.id,
+            title: `${label} (double-click to send right away)`,
+            onclick: (event) => {
+              if (event.target.closest('.fav-remove')) return;
+              selectFav(picked && event.detail < 2 ? null : f);
+            },
+            ondblclick: async (event) => {
+              if (event.target.closest('.fav-remove')) return;
+              await selectFav(f);
+              sendDrop();
+            },
+            onkeydown: (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectFav(picked ? null : f);
+              }
+            },
+          },
+          [
+            picture,
+            badge ? el('span', { class: 'fav-badge', text: badge }) : null,
+            el('button', {
+              type: 'button',
+              class: 'fav-remove',
+              title: 'Remove from saved',
+              'aria-label': `Remove ${label} from saved`,
+              text: '✕',
+              onclick: async () => {
+                await api.favRemove(f.id);
+                await loadFavs();
+                toast('Removed from saved.');
+              },
+            }),
+          ],
+        );
+        return tile;
+      }),
+    );
+    els.videoOptions.hidden = !videoSelected();
+    updateSummary();
+  }
+
+  function savedToast(res) {
+    if (!res.ok) return toast(res.error || "Couldn't save that.", 'error');
+    ui.favsLoaded = false; // reload the grid next time the ⭐ tab opens
+    return toast(res.already ? 'Already in your ⭐ saved memes.' : 'Saved! Find it under the ⭐ tab.', 'success');
+  }
+
+  els.uploadSave.addEventListener('click', async (event) => {
+    event.stopPropagation(); // the button sits inside the "click to browse" box
+    const u = ui.upload;
+    if (!u) return;
+    const thumb = await makeThumb(els.dzMedia.firstElementChild);
+    const res = await api.favAddFile({ bytes: u.bytes, name: u.name, thumb });
+    if (res.ok) u.saved = true;
+    renderUpload();
+    savedToast(res);
+  });
+
+  els.gifSave.addEventListener('click', async () => {
+    if (!ui.gif) return;
+    const res = await api.favAddGif(ui.gif);
+    if (res.ok) {
+      els.gifSave.textContent = '⭐ Saved';
+      els.gifSave.disabled = true;
+    }
+    savedToast(res);
+  });
+
+  els.textRain.addEventListener('change', updateSummary);
 
   // ================================================================== text
 
@@ -1272,7 +1458,15 @@
     els.textCount.textContent = `${text.length}/140`;
     els.textPreview.textContent = text.trim() || 'Your message';
     els.textPreview.className = `text-preview c-${ui.textColor}${text.trim() ? '' : ' placeholder'}`;
+    const short = [...text.trim()].length <= 20;
+    els.textRain.disabled = !short;
+    els.textRainLabel.classList.toggle('is-off', !short);
+    els.textRainHint.textContent = short ? '(fills their screen with it)' : '(only for 20 characters or fewer)';
     updateSummary();
+  }
+
+  function rainOn() {
+    return els.textRain.checked && !els.textRain.disabled;
   }
 
   els.textInput.addEventListener('input', renderText);
@@ -1344,7 +1538,9 @@
           el('span', { class: 'inbox-time', text: ` · ${timeAgo(entry.at)}` }),
         ]);
         const quote = entry.text ? el('div', { class: 'inbox-text', text: `“${entry.text}”` }) : null;
-        const canReact = Boolean(entry.fromId) && isConnected() && otherPeers().some((p) => p.id === entry.fromId);
+        // Their id changes if they reconnect, so fall back to the nickname.
+        const peer = isConnected() ? otherPeers().find((p) => p.id === entry.fromId) || otherPeers().find((p) => p.nickname === entry.from) : null;
+        const canReact = Boolean(peer);
         const reactions = el(
           'div',
           { class: 'reactions', role: 'group', 'aria-label': `React to ${entry.from}` },
@@ -1356,7 +1552,7 @@
               title: canReact ? `Send ${emoji} to ${entry.from}` : `${entry.from} isn't here anymore`,
               disabled: !canReact,
               onclick: async () => {
-                const res = await api.react(entry.fromId, emoji, entry.dropId);
+                const res = await api.react(peer.id, emoji, entry.dropId);
                 if (!res.ok) return toast(res.error, 'error');
                 entry.reacted = emoji;
                 renderInbox();
@@ -1478,6 +1674,17 @@
     setRangeFill(els.soundVolume);
     els.settingsMuted.checked = Boolean(s.muted);
     renderMutedFriends();
+    const displays = s.displays || [];
+    els.displayRow.hidden = displays.length < 2;
+    if (displays.length >= 2 && document.activeElement !== els.displaySelect) {
+      els.displaySelect.replaceChildren(
+        el('option', { value: 'main', text: 'My main screen' }),
+        ...displays.map((d) => el('option', { value: d.id, text: d.label })),
+      );
+      els.displaySelect.value = displays.some((d) => d.id === s.displayId) ? s.displayId : 'main';
+    }
+    els.startupRow.hidden = !s.canStartWithOs;
+    els.startupToggle.checked = Boolean(s.startWithOs);
     for (const sw of $$('.theme-swatch', els.themeList)) sw.setAttribute('aria-checked', String(sw.dataset.theme === s.theme));
     renderGiphySettings();
   }
@@ -1591,6 +1798,11 @@
     releasePreviewAudioLater(previewHandle);
   });
   els.settingsMuted.addEventListener('change', () => api.setMuted(els.settingsMuted.checked));
+  els.displaySelect.addEventListener('change', async () => {
+    await api.setDisplay(els.displaySelect.value);
+    toast('Memes will show on that screen. Try "Preview on me" to check.', 'success');
+  });
+  els.startupToggle.addEventListener('change', () => api.setStartWithOs(els.startupToggle.checked));
 
   // ============================================================== keyboard
 

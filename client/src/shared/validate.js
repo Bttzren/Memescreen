@@ -85,6 +85,8 @@ module.exports = {
   TEXT_COLORS: relay.TEXT_COLORS,
   REACTIONS: relay.REACTIONS,
   MAX_TEXT_LENGTH: relay.MAX_TEXT_LENGTH,
+  MAX_RAIN_LENGTH: relay.MAX_RAIN_LENGTH,
+  canRain: relay.canRain,
   cleanText: relay.cleanText,
   normalizeCaption: relay.normalizeCaption,
   normalizeTextColor: relay.normalizeTextColor,

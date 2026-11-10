@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('memedrop', {
   react: (to, emoji, dropId) => ipcRenderer.invoke('drop:react', { to, emoji, dropId }),
   muteFriend: (nickname, muted) => ipcRenderer.invoke('friend:mute', { nickname, muted }),
   inboxSeen: () => ipcRenderer.invoke('inbox:seen'),
+  // Saved memes
+  favList: () => ipcRenderer.invoke('fav:list'),
+  favAddFile: (input) => ipcRenderer.invoke('fav:add-file', input),
+  favAddGif: (gif) => ipcRenderer.invoke('fav:add-gif', gif),
+  favRemove: (id) => ipcRenderer.invoke('fav:remove', id),
+  favRead: (id) => ipcRenderer.invoke('fav:read', id),
   // Settings
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
   setMuted: (muted) => ipcRenderer.invoke('mute:set', muted),
@@ -32,6 +38,8 @@ contextBridge.exposeInMainWorld('memedrop', {
   setHotkey: (accelerator) => ipcRenderer.invoke('hotkey:set', accelerator),
   resetHotkey: () => ipcRenderer.invoke('hotkey:reset'),
   pauseHotkey: (paused) => ipcRenderer.invoke('hotkey:pause', paused),
+  setDisplay: (displayId) => ipcRenderer.invoke('display:set', displayId),
+  setStartWithOs: (enabled) => ipcRenderer.invoke('startup:set', enabled),
   saveGiphyKey: (key) => ipcRenderer.invoke('giphy:save', key),
   // Misc
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),

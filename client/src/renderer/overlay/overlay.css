@@ -247,3 +247,50 @@ body {
   .drop.in,
   .reaction.in { animation: none !important; }
 }
+
+/* ---------- Make it rain ---------- */
+.drop--rain {
+  inset: 0;
+  overflow: hidden;
+  transform: none;
+  transition: opacity 250ms ease;
+}
+.drop--rain.in,
+.drop--rain.out { transform: none; }
+.rain-bit {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', 'Arial Black', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  -webkit-text-stroke: 0.05em #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0.04em 0.14em rgba(0, 0, 0, 0.55);
+  transform: translateY(-120px);
+  animation-name: rain-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards;
+  will-change: transform;
+}
+.rain-bit.c-white { color: #fff; }
+.rain-bit.c-yellow { color: #ffe14d; }
+.rain-bit.c-pink { color: #ff5fb4; }
+.rain-bit.c-cyan { color: #4de8ff; }
+.rain-bit.c-lime { color: #9dff4d; }
+.rain-bit.c-orange { color: #ff9a3d; }
+.drop--rain .tag {
+  left: 50%;
+  bottom: auto;
+  top: 16px;
+  transform: translateX(-50%);
+  font-size: 15px;
+}
+@keyframes rain-fall {
+  from { transform: translateY(-120px) rotate(0deg); }
+  to { transform: translateY(calc(100vh + 120px)) rotate(var(--spin, 0deg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rain-bit { animation: none; transform: translateY(40vh); }
+}

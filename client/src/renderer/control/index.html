@@ -183,6 +183,7 @@
         <button type="button" role="tab" class="tab" data-tab="gifs" aria-selected="false">🔍 GIFs</button>
         <button type="button" role="tab" class="tab" data-tab="text" aria-selected="false">💬 Text</button>
         <button type="button" role="tab" class="tab" data-tab="sounds" aria-selected="false">🔊 Sounds</button>
+        <button type="button" role="tab" class="tab tab-narrow" data-tab="favs" aria-selected="false" title="Saved memes and GIFs" aria-label="Saved">⭐</button>
       </nav>
 
       <div class="panels">
@@ -202,6 +203,7 @@
               <div class="dz-meta">
                 <span id="upload-name" class="dz-name"></span>
                 <span id="upload-size" class="dz-size"></span>
+                <button type="button" class="link-btn" id="upload-save" title="Keep it in your ⭐ saved memes">⭐ Save</button>
               </div>
               <button id="upload-clear" class="icon-btn small dz-remove" type="button" title="Remove">
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x" /></svg>
@@ -220,6 +222,7 @@
             </form>
             <div class="gif-header">
               <span id="gif-heading">Trending</span>
+              <button id="gif-save" class="link-btn" type="button" hidden title="Keep it in your ⭐ saved memes">⭐ Save this GIF</button>
               <button id="gif-back" class="link-btn" type="button" hidden>Back to trending</button>
             </div>
             <div id="gif-scroll" class="gif-scroll">
@@ -241,7 +244,21 @@
             <div id="text-colors" class="color-dots" role="radiogroup" aria-label="Text color"></div>
             <span id="text-count" class="text-count">0/140</span>
           </div>
+          <label class="check rain-check" id="text-rain-label" title="Fills their whole screen with falling copies. Works with short text or emoji (20 characters or fewer).">
+            <input type="checkbox" id="text-rain" /> 🌧️ Make it rain <span class="rain-hint" id="text-rain-hint">(short text or emoji)</span>
+          </label>
           <div class="text-stage"><div id="text-preview" class="text-preview c-white">Your message</div></div>
+        </section>
+
+        <!-- Saved -->
+        <section id="panel-favs" class="panel" role="tabpanel" hidden>
+          <div class="gif-scroll">
+            <div id="fav-grid" class="fav-grid"></div>
+            <p id="fav-empty" class="fav-empty">
+              <span class="fav-empty-star" aria-hidden="true">⭐</span>
+              Nothing saved yet.<br />Pick an image, video or GIF, then click <strong>⭐ Save</strong> to keep it here for next time.
+            </p>
+          </div>
         </section>
 
         <!-- Sounds -->
@@ -367,7 +384,15 @@
             <input type="checkbox" id="settings-muted" class="switch" />
           </label>
           <div id="muted-friends" class="muted-friends"></div>
-          <p class="setting-help">Right-click the MemeDrop icon by the clock for more: pick which screen memes show on, start with Windows, or quit.</p>
+          <div class="control-row compact select-row" id="display-row" hidden>
+            <label for="display-select">Show on</label>
+            <select id="display-select"></select>
+          </div>
+          <label class="switch-row" id="startup-row" hidden>
+            <span>Start MemeDrop with Windows <span class="setting-sub">(quietly, in the tray)</span></span>
+            <input type="checkbox" id="startup-toggle" class="switch" />
+          </label>
+          <p class="setting-help">MemeDrop keeps running by the clock when you close this window. Right-click its icon there to quit.</p>
         </section>
 
         <p class="about" id="about"></p>

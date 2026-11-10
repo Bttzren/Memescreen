@@ -11,6 +11,7 @@ const {
   POSITIONS,
   REACTIONS,
   MAX_TEXT_LENGTH,
+  canRain,
   normalizeEffect,
   normalizeTextColor,
   normalizeCaption,
@@ -70,6 +71,7 @@ const HEARTBEAT_MS = 30_000;
  *       effect?:    'pop' | 'slide' | 'bounce' | 'shake' | 'spin' | 'zoom' | 'none'
  *       caption?:   { top?, bottom? } meme text on images, GIFs and videos
  *       text:       up to 140 characters; color: white | yellow | pink | cyan | lime | orange
+ *       rain?:      true = fill the screen with falling copies (text of 20 characters or fewer)
  *     { type: 'react', to: <peerId>, emoji, dropId? }    (emoji from REACTIONS)
  *     { type: 'gif-search', reqId, query, offset? }
  *     { type: 'gif-trending', reqId, offset? }
@@ -305,6 +307,7 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
       const text = cleanText(msg.text, MAX_TEXT_LENGTH);
       if (!text) return sendError(client, 'bad_text', 'Type a message to drop.', msg);
       outgoing = { ...base, text, color: normalizeTextColor(msg.color) };
+      if (msg.rain === true && canRain(text)) outgoing.rain = true;
     } else {
       outgoing = base; // sound only
     }

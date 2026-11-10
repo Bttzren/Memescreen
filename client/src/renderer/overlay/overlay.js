@@ -213,8 +213,43 @@
     }
   }
 
+  /** "Make it rain": short text or emoji falling all over the screen. */
+  function addRain(drop) {
+    const el = document.createElement('div');
+    el.className = `drop drop--rain${drop.preview ? ' drop--preview' : ''}`;
+    const item = { el, timers: [], cleanups: [] };
+    items.set(drop.id, item);
+
+    const total = drop.durationMs;
+    const count = Math.max(14, Math.min(42, Math.round(window.innerWidth / 46)));
+    for (let i = 0; i < count; i++) {
+      const bit = document.createElement('span');
+      bit.className = `rain-bit c-${drop.color || 'white'}`;
+      bit.textContent = drop.text;
+      const fall = 1500 + Math.random() * 1700; // ms to cross the screen
+      // Spread the columns evenly, then nudge each so it doesn't look like a grid.
+      bit.style.left = `${((i + Math.random() * 0.8) / count) * 96}%`;
+      bit.style.fontSize = `${26 + Math.random() * 44}px`;
+      bit.style.setProperty('--spin', `${Math.round(Math.random() * 50 - 25)}deg`);
+      bit.style.animationDuration = `${fall}ms`;
+      bit.style.animationDelay = `${Math.round(Math.random() * Math.max(200, total - fall))}ms`;
+      bit.style.opacity = String(drop.opacity);
+      el.append(bit);
+    }
+    el.append(makeTag(drop));
+    stage.append(el);
+    report();
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+    item.timers.push(setTimeout(() => remove(drop.id), total + 50));
+    playSound(drop, item);
+  }
+
   /** Text drop: big meme text that scales like an image would. */
   function addText(drop) {
+    if (drop.rain) {
+      addRain(drop);
+      return;
+    }
     const el = document.createElement('div');
     el.className = `drop drop--text drop--${drop.position}${drop.preview ? ' drop--preview' : ''}`;
     const card = document.createElement('div');

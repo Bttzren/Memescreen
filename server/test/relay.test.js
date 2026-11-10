@@ -547,6 +547,13 @@ test('text drops, meme captions and entrance effects', async () => {
     assert.equal(drop.color, 'white', 'unknown colors fall back');
     assert.equal(drop.effect, 'pop', 'unknown effects fall back');
 
+    a.send({ type: 'drop', to: b.id, kind: 'text', text: '💀💀💀', rain: true });
+    assert.equal((await b.next('drop')).rain, true, 'short text can rain');
+    a.send({ type: 'drop', to: b.id, kind: 'text', text: 'this sentence is far too long to rain', rain: true });
+    assert.equal((await b.next('drop')).rain, undefined, 'long text never rains');
+    a.send({ type: 'drop', to: b.id, kind: 'text', text: 'hi', rain: 'yes' });
+    assert.equal((await b.next('drop')).rain, undefined, 'rain must be exactly true');
+
     a.send({ type: 'drop', ref: 9, to: b.id, kind: 'text', text: '   ' });
     const err = await a.next('error');
     assert.equal(err.code, 'bad_text');

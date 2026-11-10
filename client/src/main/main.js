@@ -18,6 +18,7 @@ const {
 } = require('electron');
 const { Connection } = require('./connection');
 const { OverlayManager } = require('./overlay');
+const { createFavorites } = require('./favorites');
 const { createTray } = require('./tray');
 const { createSettings } = require('./settings');
 const { HostManager } = require('./host');
@@ -65,6 +66,8 @@ function run() {
   let role = null; // 'host' | 'join' | null
   let hotkey = { accelerator: Hotkey.DEFAULT_HOTKEY, ok: false };
   let trayHintShown = false;
+  let favorites = null;
+  let hotkeyPaused = false; // true while Settings is recording a new panic key
   // What friends sent recently (the 📥 inbox). Lives here so it survives the
   // window being closed (which frees the window's memory).
   const recentIncoming = [];
@@ -109,6 +112,7 @@ function run() {
     Menu.setApplicationMenu(null);
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
+    favorites = createFavorites(path.join(app.getPath('userData'), 'favorites'));
     overlay = new OverlayManager({ displayId: settings.get().displayId });
     overlay.create(); // warm it up so the first meme appears instantly
 
@@ -133,11 +137,7 @@ function run() {
       onToggleMute: () => setMuted(!settings.get().muted),
       onToggleSounds: () => updateSettings({ soundsEnabled: !settings.get().soundsEnabled }),
       onToggleStartup: () => setStartWithOs(!getStartWithOs()),
-      onPickDisplay: (displayId) => {
-        settings.update({ displayId });
-        overlay.setDisplay(displayId);
-        tray.update({ displayId });
-      },
+      onPickDisplay: (displayId) => pickDisplay(displayId),
       getDisplays: listDisplays,
       canStartWithOs: CAN_START_WITH_OS,
       onClear: () => overlay.clearAll(),
@@ -159,7 +159,10 @@ function run() {
     });
     // Keep the "Show memes on" list current when monitors come and go.
     for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
-      screen.on(event, () => tray.update({}));
+      screen.on(event, () => {
+        tray.update({});
+        sendState();
+      });
     }
     // Started with Windows: stay in the tray without loading the window at all.
     if (!START_HIDDEN) createControlWindow();
@@ -268,6 +271,7 @@ function run() {
     });
     controlWin.on('closed', () => {
       controlWin = null;
+      resumeHotkey(); // in case the window was closed while picking a new panic key
     });
   }
 
@@ -331,6 +335,10 @@ function run() {
       soundsEnabled: s.soundsEnabled,
       soundVolume: s.soundVolume,
       mutedFriends: mutedFriends(),
+      displays: listDisplays(),
+      displayId: s.displayId,
+      canStartWithOs: CAN_START_WITH_OS,
+      startWithOs: getStartWithOs(),
       theme: s.theme,
       hasGiphyKey: Boolean(s.giphyKey),
       hotkey: { accelerator: hotkey.accelerator, label: hotkeyLabel(), ok: hotkey.ok },
@@ -437,6 +445,7 @@ function run() {
 
   function changeHotkey(accel) {
     if (!Hotkey.isPlausibleAccelerator(accel)) return { ok: false, error: "That shortcut can't be used. Try something like Ctrl+Shift+X." };
+    hotkeyPaused = false; // whatever happens below, the key ends up registered (or reported as taken)
     if (accel === hotkey.accelerator && hotkey.ok) return { ok: true };
     const old = hotkey.accelerator;
     if (hotkey.ok) globalShortcut.unregister(old);
@@ -647,11 +656,30 @@ function run() {
       if (paused && hotkey.ok) {
         globalShortcut.unregister(hotkey.accelerator);
         hotkey.ok = false;
-      } else if (!paused && !hotkey.ok) {
-        hotkey.ok = registerPanic(hotkey.accelerator);
+        hotkeyPaused = true;
+      } else if (!paused) {
+        resumeHotkey();
       }
       return { ok: true };
     });
+
+    ipcMain.handle('display:set', (_e, displayId) => {
+      const id = String(displayId || 'main');
+      pickDisplay(id === 'main' || listDisplays().some((d) => d.id === id) ? id : 'main');
+      return { ok: true };
+    });
+
+    ipcMain.handle('startup:set', (_e, enabled) => {
+      setStartWithOs(Boolean(enabled));
+      sendState();
+      return { ok: true };
+    });
+
+    ipcMain.handle('fav:list', () => favorites.list());
+    ipcMain.handle('fav:add-file', (_e, input) => guard(() => favorites.addFile(input || {})));
+    ipcMain.handle('fav:add-gif', (_e, gif) => guard(() => favorites.addGif(gif || {})));
+    ipcMain.handle('fav:remove', (_e, id) => guard(() => favorites.remove(id)));
+    ipcMain.handle('fav:read', (_e, id) => favorites.read(id));
 
     ipcMain.handle('giphy:save', async (_e, rawKey) => {
       const key = typeof rawKey === 'string' ? rawKey.trim() : '';
@@ -699,6 +727,30 @@ function run() {
   }
 
   // "Start with Windows" launches hidden in the tray (--hidden).
+  function resumeHotkey() {
+    if (!hotkeyPaused) return;
+    hotkeyPaused = false;
+    if (!hotkey.ok) hotkey.ok = registerPanic(hotkey.accelerator);
+    sendState();
+  }
+
+  function pickDisplay(displayId) {
+    settings.update({ displayId });
+    overlay.setDisplay(displayId);
+    tray.update({ displayId });
+    sendState();
+  }
+
+  /** Disk trouble (full, read-only…) becomes a friendly message, not a crash. */
+  function guard(fn) {
+    try {
+      return fn();
+    } catch (err) {
+      console.warn(`favorites: ${err.message}`);
+      return { ok: false, error: "Couldn't save that. Is your disk full?" };
+    }
+  }
+
   function getStartWithOs() {
     if (!CAN_START_WITH_OS) return false;
     try {
@@ -789,7 +841,9 @@ function buildOutgoingDrop(payload, limits) {
   if (kind === 'text') {
     const text = V.cleanText(payload.text, V.MAX_TEXT_LENGTH);
     if (!text) throw new Error('Type a message to drop.');
-    return { kind: 'text', text, color: V.normalizeTextColor(payload.color), ...opts, sound };
+    const out = { kind: 'text', text, color: V.normalizeTextColor(payload.color), ...opts, sound };
+    if (payload.rain === true && V.canRain(text)) out.rain = true;
+    return out;
   }
 
   if (kind === 'image' || kind === 'video') {
@@ -868,6 +922,7 @@ function toOverlayDrop(msg, limits) {
     drop.text = V.cleanText(msg.text, V.MAX_TEXT_LENGTH);
     if (!drop.text) return null;
     drop.color = V.normalizeTextColor(msg.color);
+    drop.rain = msg.rain === true && V.canRain(drop.text);
     drop.caption = null;
   } else if (kind !== 'sound') {
     return null;

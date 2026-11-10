@@ -94,6 +94,12 @@ const TEXT_COLORS = Object.freeze(['white', 'yellow', 'pink', 'cyan', 'lime', 'o
 const REACTIONS = Object.freeze(['😂', '🔥', '💀', '😭', '❤️', '👍', '😮', '🤡']);
 const MAX_CAPTION_LENGTH = 80;
 const MAX_TEXT_LENGTH = 140;
+/** "Make it rain" fills the screen with copies, so only short text may rain. */
+const MAX_RAIN_LENGTH = 20;
+
+function canRain(text) {
+  return typeof text === 'string' && text.length > 0 && [...text].length <= MAX_RAIN_LENGTH;
+}
 
 function normalizeEffect(value) {
   return EFFECTS.includes(value) ? value : 'pop';
@@ -285,6 +291,8 @@ module.exports = {
   REACTIONS,
   MAX_CAPTION_LENGTH,
   MAX_TEXT_LENGTH,
+  MAX_RAIN_LENGTH,
+  canRain,
   normalizeEffect,
   normalizeTextColor,
   normalizeCaption,
