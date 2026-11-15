@@ -7,7 +7,7 @@ One friend clicks **Host a room** and sends everyone the invite link. Everyone e
 **No terminal, no config files, no accounts.** Everything is done by clicking in the app.
 
 <p align="center">
-  <img src="docs/app.png" alt="MemeDrop: the welcome screen, sending a GIF with an air horn to two friends, and the Text tab with Make it rain" width="760">
+  <img src="docs/app.png" alt="MemeDrop: the welcome screen, sending a GIF with an air horn to two friends, and a drawing on the Draw tab" width="760">
 </p>
 <p align="center">
   <img src="docs/overlay.png" alt="A captioned meme and a GG EZ message floating over someone's apps, with emoji reactions in the corner" width="640">
@@ -65,7 +65,7 @@ Anyone in the room can click **Invite** (top bar) to copy the link and bring mor
 4. **Preview on me** shows it on your own screen first. **Drop it!** (or **Ctrl+Enter**) sends it.
 
 <p align="center">
-  <img src="docs/features.png" alt="Adding meme text and a spin entrance to an upload, the Saved tab, and the inbox with emoji reactions" width="760">
+  <img src="docs/features.png" alt="A message set to rain down a friend's screen, the Saved tab, and the inbox with emoji reactions" width="760">
 </p>
 
 ## Getting memes
