@@ -59,7 +59,7 @@ const HEARTBEAT_MS = 30_000;
  *
  * Wire protocol (JSON text frames):
  *   client → server
- *     { type: 'join', room, nickname }
+ *     { type: 'join', room, nickname, version? }        (version: the app's "1.3.0")
  *     { type: 'drop', ref?, to, kind: 'image', data: <base64>, opacity, durationMs, position, sound? }
  *     { type: 'drop', ref?, to, kind: 'video', data: <base64>, videoSound, opacity, durationMs, position, sound? }
  *     { type: 'drop', ref?, to, kind: 'gif', url, width?, height?, title?, opacity, durationMs, position, sound? }
@@ -79,7 +79,7 @@ const HEARTBEAT_MS = 30_000;
  *   server → client
  *     { type: 'welcome', protocol, id, room, nickname, peers, limits, features }
  *     { type: 'features', features: { giphy } }           (GIF search switched on/off)
- *     { type: 'roster', peers: [{ id, nickname }] }      (everyone in the room, including you)
+ *     { type: 'roster', peers: [{ id, nickname, version }] }  (everyone in the room, including you)
  *     { type: 'drop', dropId, from: { id, nickname }, kind, ... }
  *     { type: 'drop-sent', ref, dropId, delivered, to }
  *     { type: 'reaction', from: { id, nickname }, emoji, dropId }
@@ -214,6 +214,8 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
     }
 
     client.nickname = uniqueNickname(requestedNick, members);
+    // Which MemeDrop they run, so friends can tell who needs to update.
+    client.version = typeof msg.version === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(msg.version) ? msg.version : null;
     client.room = room;
     members.set(client.id, client);
     rooms.set(room, members);
@@ -425,7 +427,7 @@ function createRelay({ server, limits: limitOverrides = {}, giphy = null, log = 
   }
 
   function roster(members) {
-    return [...members.values()].map((c) => ({ id: c.id, nickname: c.nickname }));
+    return [...members.values()].map((c) => ({ id: c.id, nickname: c.nickname, version: c.version || null }));
   }
 
   function broadcastRoster(room, skipId) {

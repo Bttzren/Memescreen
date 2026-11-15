@@ -29,6 +29,10 @@ const { parseInvite, buildInviteLink, randomRoomName } = require('../shared/invi
 const Hotkey = require('../shared/hotkey');
 
 const THEMES = ['bubblegum', 'ocean', 'lime', 'sunset', 'mono', 'light'];
+// Where to get MemeDrop (the README's install steps), and where the newest
+// version number lives: the app's package.json on the main branch.
+const DOWNLOAD_URL = 'https://github.com/Bttzren/Memescreen#1-install';
+const UPDATE_URL = process.env.MEMEDROP_UPDATE_URL || 'https://raw.githubusercontent.com/Bttzren/Memescreen/main/client/package.json';
 const PROTOCOL = 'memedrop';
 const ASSETS = path.join(__dirname, '..', '..', 'assets');
 const START_HIDDEN = process.argv.includes('--hidden');
@@ -73,7 +77,8 @@ function run() {
   const recentIncoming = [];
   let unreadIncoming = 0;
   let pendingInvite = findDeepLink(process.argv);
-  const connection = new Connection();
+  const connection = new Connection({ appVersion: app.getVersion() });
+  let updateInfo = null; // { version, url } when a newer MemeDrop is out
 
   if (process.platform === 'win32') app.setAppUserModelId('com.memedrop.app');
 
@@ -178,6 +183,10 @@ function run() {
 
     powerMonitor.on('resume', () => connection.reconnectNow());
 
+    // Look for a newer MemeDrop shortly after starting, then twice a day.
+    setTimeout(checkForUpdates, 15_000).unref();
+    setInterval(checkForUpdates, 12 * 60 * 60 * 1000).unref();
+
     ready = true;
     const s = settings.get();
     if (pendingInvite) {
@@ -232,7 +241,7 @@ function run() {
 
   function createControlWindow() {
     controlWin = new BrowserWindow({
-      width: 480,
+      width: 520,
       height: 820,
       minWidth: 420,
       minHeight: 660,
@@ -335,6 +344,9 @@ function run() {
       soundsEnabled: s.soundsEnabled,
       soundVolume: s.soundVolume,
       mutedFriends: mutedFriends(),
+      appVersion: app.getVersion(),
+      update: updateInfo,
+      checkUpdates: s.checkUpdates !== false,
       displays: listDisplays(),
       displayId: s.displayId,
       canStartWithOs: CAN_START_WITH_OS,
@@ -368,8 +380,11 @@ function run() {
     if ('position' in patch) clean.position = opts.position;
     if ('effect' in patch) clean.effect = opts.effect;
     if ('textColor' in patch) clean.textColor = V.normalizeTextColor(patch.textColor);
+    if ('checkUpdates' in patch) clean.checkUpdates = Boolean(patch.checkUpdates);
     settings.update(clean);
     if ('soundsEnabled' in clean) tray.update({ soundsEnabled: clean.soundsEnabled });
+    if (clean.checkUpdates === true) checkForUpdates();
+    if (clean.checkUpdates === false) updateInfo = null;
     sendState();
     return publicSettings();
   }
@@ -727,6 +742,25 @@ function run() {
   }
 
   // "Start with Windows" launches hidden in the tray (--hidden).
+  /** Ask GitHub whether a newer MemeDrop is out (just reads a version number; nothing about you is sent). */
+  async function checkForUpdates() {
+    if (settings.get().checkUpdates === false || process.env.MEMEDROP_NO_UPDATE_CHECK === '1') return;
+    try {
+      const res = await net.fetch(UPDATE_URL, {
+        headers: { 'User-Agent': `MemeDrop/${app.getVersion()}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return; // offline or rate limited: try again later
+      const latest = await res.json();
+      const version = String((latest && latest.version) || '');
+      if (!isNewerVersion(version, app.getVersion())) return;
+      updateInfo = { version, url: DOWNLOAD_URL };
+      sendState();
+    } catch {
+      /* offline: try again later */
+    }
+  }
+
   function resumeHotkey() {
     if (!hotkeyPaused) return;
     hotkeyPaused = false;
@@ -939,11 +973,23 @@ function toOverlayDrop(msg, limits) {
   return drop;
 }
 
+/** "1.10.0" > "1.9.2"? Anything that isn't x.y.z counts as not newer. */
+function isNewerVersion(candidate, current) {
+  const parse = (v) => (/^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null);
+  const a = parse(candidate);
+  const b = parse(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return false;
+}
+
 function openExternalSafely(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
-    if (u.protocol === 'https:' && (host === 'giphy.com' || host.endsWith('.giphy.com'))) {
+    const giphy = host === 'giphy.com' || host.endsWith('.giphy.com');
+    const ourRepo = host === 'github.com' && (u.pathname === '/Bttzren/Memescreen' || u.pathname.startsWith('/Bttzren/Memescreen/'));
+    if (u.protocol === 'https:' && (giphy || ourRepo)) {
       shell.openExternal(u.toString());
     }
   } catch {

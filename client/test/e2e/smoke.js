@@ -399,8 +399,23 @@ async function main() {
     const resent = await guest.next('drop');
     assert.equal(resent.kind, 'image');
     assert.equal(resent.data, data, 'the saved meme is sent exactly as it was');
+
+    // Draw tab: a scribble arrives as a see-through PNG.
+    await control.click('.tab[data-tab="draw"]');
+    const box = await control.locator('#draw-canvas').boundingBox();
+    await control.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    await control.mouse.down();
+    await control.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.7, { steps: 8 });
+    await control.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.4, { steps: 8 });
+    await control.mouse.up();
+    await control.waitForFunction(() => !document.getElementById('send-btn').disabled);
+    await control.click('#send-btn');
+    const doodle = await guest.next('drop');
+    const png = Buffer.from(doodle.data, 'base64');
+    assert.equal(doodle.mime, 'image/png');
+    assert.equal(png[25], 6, 'the drawing has a transparent background');
     guest.ws.terminate();
-    log('PASS: text from the window, saved memes');
+    log('PASS: text from the window, saved memes, drawing');
 
     log('ALL GOOD');
   } finally {

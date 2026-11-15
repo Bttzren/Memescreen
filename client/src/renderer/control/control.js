@@ -44,7 +44,16 @@
     aloneHint: $('alone-hint'),
     aloneInvite: $('alone-invite'),
     tabs: $$('.tab'),
-    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), text: $('panel-text'), sounds: $('panel-sounds'), favs: $('panel-favs') },
+    panels: { upload: $('panel-upload'), gifs: $('panel-gifs'), text: $('panel-text'), draw: $('panel-draw'), sounds: $('panel-sounds'), favs: $('panel-favs') },
+    drawColors: $('draw-colors'),
+    drawSizes: $('draw-sizes'),
+    drawEraser: $('draw-eraser'),
+    drawUndo: $('draw-undo'),
+    drawClear: $('draw-clear'),
+    drawStage: $('draw-stage'),
+    drawCanvas: $('draw-canvas'),
+    drawHint: $('draw-hint'),
+    drawSave: $('draw-save'),
     uploadSave: $('upload-save'),
     gifSave: $('gif-save'),
     favGrid: $('fav-grid'),
@@ -56,6 +65,7 @@
     displaySelect: $('display-select'),
     startupRow: $('startup-row'),
     startupToggle: $('startup-toggle'),
+    checkUpdates: $('check-updates'),
     inboxBtn: $('inbox-btn'),
     inboxBadge: $('inbox-badge'),
     inbox: $('inbox'),
@@ -168,9 +178,13 @@
     favs: [], // saved memes: { id, type: 'file'|'gif', ... , thumbUrl }
     favsLoaded: false,
     fav: null, // selected saved meme: { item, bytes? }
+    draw: { color: '#ff3b3b', size: 10, erase: false, strokes: [], png: null, pending: null, saved: false },
     inbox: [], // newest first: { key, from, fromId, dropId, kind, text, at, reacted }
     unread: 0,
+    dismissed: new Set(), // banners closed with ✕ (for this session)
   };
+
+  const RELEASES_URL = 'https://github.com/Bttzren/Memescreen#1-install';
 
   const TEXT_COLORS = { white: '#ffffff', yellow: '#ffe14d', pink: '#ff5fb4', cyan: '#4de8ff', lime: '#9dff4d', orange: '#ff9a3d' };
   const REACTIONS = ['😂', '🔥', '💀', '😭', '❤️', '👍', '😮', '🤡'];
@@ -450,6 +464,22 @@
     if (s.muted) {
       list.push({ kind: 'warn', text: "Muted: memes from friends won't show up.", action: { label: 'Unmute', run: () => api.setMuted(false) } });
     }
+    if (s.status === 'connected' && s.protocol && s.protocol < 3) {
+      list.push({
+        kind: 'warn',
+        text: "The host's MemeDrop is an older version, so messages, meme text and reactions won't work in this room until they update.",
+        dismissKey: 'old-host',
+      });
+    }
+    for (const b of versionBanners()) list.push(b);
+    if (s.update && s.update.version) {
+      list.push({
+        kind: 'info',
+        text: `MemeDrop ${s.update.version} is out!`,
+        action: { label: 'Get it', run: () => api.openExternal(RELEASES_URL) },
+        dismissKey: `update-${s.update.version}`,
+      });
+    }
     if (s.hotkey && !s.hotkey.ok && !ui.recording) {
       list.push({
         kind: 'warn',
@@ -458,13 +488,69 @@
       });
     }
     els.banners.replaceChildren(
-      ...list.map((b) =>
-        el('div', { class: `banner ${b.kind}` }, [
-          el('span', { class: 'banner-text', text: b.text }),
-          b.action ? el('button', { type: 'button', text: b.action.label, onclick: b.action.run }) : null,
-        ]),
-      ),
+      ...list
+        .filter((b) => !b.dismissKey || !ui.dismissed.has(b.dismissKey))
+        .map((b) =>
+          el('div', { class: `banner ${b.kind}` }, [
+            el('span', { class: 'banner-text', text: b.text }),
+            b.action ? el('button', { type: 'button', text: b.action.label, onclick: b.action.run }) : null,
+            b.dismissKey
+              ? el('button', {
+                  type: 'button',
+                  class: 'banner-x',
+                  title: 'Hide',
+                  'aria-label': 'Hide this message',
+                  text: '✕',
+                  onclick: () => {
+                    ui.dismissed.add(b.dismissKey);
+                    renderBanners();
+                  },
+                })
+              : null,
+          ]),
+        ),
     );
+  }
+
+  /** Major.minor as a number for comparing: "1.3.2" → 1003. */
+  function featureLevel(version) {
+    const m = /^(\d+)\.(\d+)\.\d+$/.exec(version || '');
+    return m ? Number(m[1]) * 1000 + Number(m[2]) : 0;
+  }
+
+  /** Friends on an older (or newer) MemeDrop than this one. */
+  function versionBanners() {
+    const s = ui.conn;
+    if (s.status !== 'connected' || !s.appVersion) return [];
+    const mine = featureLevel(s.appVersion);
+    const peers = otherPeers();
+    const older = peers.filter((p) => featureLevel(p.version) < mine);
+    const newer = peers.filter((p) => featureLevel(p.version) > mine);
+    const names = (list) => (list.length > 2 ? `${list[0].nickname}, ${list[1].nickname} and ${list.length - 2} more` : list.map((p) => p.nickname).join(' and '));
+    const out = [];
+    if (older.length) {
+      out.push({
+        kind: 'info',
+        text: `${names(older)} ${older.length === 1 ? 'is' : 'are'} on an older MemeDrop, so some of the newer stuff you send may not show up for them.`,
+        action: {
+          label: 'Copy download link',
+          run: async () => {
+            await api.copyText(RELEASES_URL);
+            toast('Download link copied. Send it to them so they can update.', 'success');
+          },
+        },
+        dismissKey: `older-${older.map((p) => p.nickname).sort().join(',')}`,
+      });
+    }
+    if (newer.length) {
+      out.push({
+        kind: 'info',
+        text: `${names(newer)} ${newer.length === 1 ? 'has' : 'have'} a newer MemeDrop. Update to see everything they send.`,
+        action: { label: 'Get it', run: () => api.openExternal(RELEASES_URL) },
+        dismissKey: `newer-${newer.map((p) => p.nickname).sort().join(',')}`,
+      });
+    }
+    return out;
   }
 
   async function restartRoom() {
@@ -1148,6 +1234,9 @@
       return text ? { kind: 'text', text, color: ui.textColor, rain: rainOn(), ...base, sound } : null;
     }
     base.caption = captionPayload();
+    if (ui.tab === 'draw') {
+      return ui.draw.png ? { kind: 'image', bytes: ui.draw.png, ...base, sound } : null;
+    }
     if (ui.tab === 'favs') {
       if (!ui.fav) return null;
       const f = ui.fav.item;
@@ -1198,6 +1287,9 @@
       const text = els.textInput.value.trim();
       const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
       parts = text ? [['strong', `“${text.length > 40 ? `${text.slice(0, 40)}…` : text}”`], ...extra, ' → ', ['strong', target]] : ['Type a message to drop.'];
+    } else if (ui.tab === 'draw') {
+      const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
+      parts = ui.draw.png ? [['strong', 'Your drawing'], ...extra, ' → ', ['strong', target]] : ['Draw something to drop on their screen.'];
     } else if (ui.tab === 'favs') {
       const extra = ui.attachSound ? [' + ', soundName(ui.attachSound)] : [];
       parts = ui.fav ? [['strong', ui.fav.item.type === 'gif' ? ui.fav.item.title : ui.fav.item.name], ...extra, ' → ', ['strong', target]] : ['Pick one of your saved memes to drop.'];
@@ -1227,6 +1319,7 @@
 
   async function sendDrop() {
     if (ui.sending) return;
+    if (ui.tab === 'draw' && ui.draw.pending) await ui.draw.pending;
     const payload = currentPayload();
     if (!payload) {
       toast('Pick something to drop first.', 'error');
@@ -1426,6 +1519,230 @@
   });
 
   els.textRain.addEventListener('change', updateSummary);
+
+  // ================================================================== draw
+
+  const PEN_COLORS = ['#ff3b3b', '#ffd60a', '#34d058', '#38bdf8', '#a78bfa', '#ff5fb4', '#ffffff', '#111111'];
+  const drawCtx = els.drawCanvas.getContext('2d');
+  let drawing = null; // the stroke under the pen right now
+
+  function renderPenTools() {
+    els.drawColors.replaceChildren(
+      ...PEN_COLORS.map((color) => {
+        const dot = el('button', {
+          type: 'button',
+          class: 'color-dot',
+          role: 'radio',
+          'aria-checked': String(!ui.draw.erase && color === ui.draw.color),
+          'aria-label': `Pen color ${color}`,
+          'data-color': color,
+          onclick: () => {
+            ui.draw.color = color;
+            ui.draw.erase = false;
+            renderPenTools();
+          },
+        });
+        dot.style.setProperty('--dot', color);
+        return dot;
+      }),
+    );
+    for (const b of els.drawSizes.querySelectorAll('button')) b.setAttribute('aria-checked', String(Number(b.dataset.size) === ui.draw.size));
+    els.drawEraser.setAttribute('aria-pressed', String(ui.draw.erase));
+    els.drawStage.classList.toggle('erasing', ui.draw.erase);
+  }
+
+  els.drawSizes.addEventListener('click', (event) => {
+    const b = event.target.closest('button[data-size]');
+    if (!b) return;
+    ui.draw.size = Number(b.dataset.size);
+    renderPenTools();
+  });
+  els.drawEraser.addEventListener('click', () => {
+    ui.draw.erase = !ui.draw.erase;
+    renderPenTools();
+  });
+
+  /** Keep the canvas sharp at the stage's current size, then redraw. */
+  function fitCanvas() {
+    const rect = els.drawStage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
+    if (els.drawCanvas.width !== w || els.drawCanvas.height !== h) {
+      els.drawCanvas.width = w;
+      els.drawCanvas.height = h;
+    }
+    paintStrokes(drawCtx, ui.draw.strokes, dpr, 0, 0, true);
+  }
+
+  function strokePath(ctx, pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    if (pts.length === 1) {
+      ctx.lineTo(pts[0][0] + 0.01, pts[0][1]); // a dot
+    } else {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+        const my = (pts[i][1] + pts[i + 1][1]) / 2;
+        ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+      }
+      const last = pts[pts.length - 1];
+      ctx.lineTo(last[0], last[1]);
+    }
+    ctx.stroke();
+  }
+
+  /** Draw strokes (in stage pixels) onto ctx at `scale`, shifted by (-ox, -oy). */
+  function paintStrokes(ctx, strokes, scale, ox, oy, clear) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (clear) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.setTransform(scale, 0, 0, scale, -ox * scale, -oy * scale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const st of strokes) {
+      ctx.globalCompositeOperation = st.erase ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = st.erase ? '#000' : st.color;
+      ctx.lineWidth = st.size;
+      strokePath(ctx, st.points);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function stagePoint(event) {
+    const r = els.drawCanvas.getBoundingClientRect();
+    return [Math.round((event.clientX - r.left) * 10) / 10, Math.round((event.clientY - r.top) * 10) / 10];
+  }
+
+  els.drawCanvas.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    els.drawCanvas.setPointerCapture(event.pointerId);
+    drawing = { color: ui.draw.color, size: ui.draw.erase ? Math.max(ui.draw.size * 2, 16) : ui.draw.size, erase: ui.draw.erase, points: [stagePoint(event)] };
+    ui.draw.strokes.push(drawing);
+    els.drawHint.hidden = true;
+    fitCanvas();
+  });
+  els.drawCanvas.addEventListener('pointermove', (event) => {
+    if (!drawing) return;
+    const p = stagePoint(event);
+    const last = drawing.points[drawing.points.length - 1];
+    if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 1.5) return;
+    drawing.points.push(p);
+    fitCanvas();
+  });
+  const endStroke = () => {
+    if (!drawing) return;
+    drawing = null;
+    drawingChanged();
+  };
+  els.drawCanvas.addEventListener('pointerup', endStroke);
+  els.drawCanvas.addEventListener('pointercancel', endStroke);
+
+  function undoStroke() {
+    if (!ui.draw.strokes.length) return;
+    ui.draw.strokes.pop();
+    fitCanvas();
+    drawingChanged();
+  }
+  els.drawUndo.addEventListener('click', undoStroke);
+  els.drawClear.addEventListener('click', () => {
+    ui.draw.strokes = [];
+    fitCanvas();
+    drawingChanged();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (ui.tab !== 'draw' || ui.view !== 'main' || !els.settings.hidden) return;
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      undoStroke();
+    }
+  });
+
+  /**
+   * Turn the strokes into a PNG with a transparent background, cropped to
+   * what was drawn, at 2x for crisp lines on the friend's screen.
+   */
+  function exportDrawing(strokes) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of strokes) {
+      if (st.erase) continue;
+      const pad = st.size / 2 + 6;
+      for (const [x, y] of st.points) {
+        minX = Math.min(minX, x - pad);
+        minY = Math.min(minY, y - pad);
+        maxX = Math.max(maxX, x + pad);
+        maxY = Math.max(maxY, y + pad);
+      }
+    }
+    if (!Number.isFinite(minX)) return Promise.resolve(null);
+    const w = maxX - minX;
+    const h = maxY - minY;
+    const scale = Math.min(2, 2400 / Math.max(w, h));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.ceil(w * scale));
+    canvas.height = Math.max(1, Math.ceil(h * scale));
+    const ctx = canvas.getContext('2d');
+    paintStrokes(ctx, strokes, scale, minX, minY, true);
+    // Everything erased away? Then there's nothing to send.
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let visible = false;
+    for (let i = 3; i < pixels.length; i += 16) {
+      if (pixels[i] > 8) {
+        visible = true;
+        break;
+      }
+    }
+    if (!visible) return Promise.resolve(null);
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png')).then(async (blob) => (blob ? new Uint8Array(await blob.arrayBuffer()) : null));
+  }
+
+  function drawingChanged() {
+    ui.draw.saved = false;
+    els.drawHint.hidden = ui.draw.strokes.length > 0;
+    const strokes = ui.draw.strokes.slice();
+    const job = exportDrawing(strokes).then((png) => {
+      if (ui.draw.pending !== job) return; // a newer stroke already replaced this one
+      ui.draw.png = png;
+      ui.draw.pending = null;
+      els.drawSave.disabled = !png;
+      els.drawSave.textContent = '⭐ Save';
+      updateSummary();
+    });
+    ui.draw.pending = job;
+    updateSummary();
+  }
+
+  els.drawSave.addEventListener('click', async () => {
+    if (ui.draw.pending) await ui.draw.pending;
+    if (!ui.draw.png || ui.draw.saved) return;
+    const thumb = await makeThumbFromPng(ui.draw.png);
+    const res = await api.favAddFile({ bytes: ui.draw.png, name: 'My drawing', thumb });
+    if (res.ok) {
+      ui.draw.saved = true;
+      els.drawSave.textContent = '⭐ Saved';
+      els.drawSave.disabled = true;
+    }
+    savedToast(res);
+  });
+
+  async function makeThumbFromPng(bytes) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return await makeThumb(img);
+    } catch {
+      return null;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  new ResizeObserver(() => fitCanvas()).observe(els.drawStage);
 
   // ================================================================== text
 
@@ -1683,6 +2000,8 @@
       );
       els.displaySelect.value = displays.some((d) => d.id === s.displayId) ? s.displayId : 'main';
     }
+    els.checkUpdates.checked = s.checkUpdates !== false;
+    renderAbout();
     els.startupRow.hidden = !s.canStartWithOs;
     els.startupToggle.checked = Boolean(s.startWithOs);
     for (const sw of $$('.theme-swatch', els.themeList)) sw.setAttribute('aria-checked', String(sw.dataset.theme === s.theme));
@@ -1803,6 +2122,19 @@
     toast('Memes will show on that screen. Try "Preview on me" to check.', 'success');
   });
   els.startupToggle.addEventListener('change', () => api.setStartWithOs(els.startupToggle.checked));
+  els.checkUpdates.addEventListener('change', () => api.updateSettings({ checkUpdates: els.checkUpdates.checked }));
+
+  function renderAbout() {
+    const s = ui.conn || {};
+    const parts = [`MemeDrop ${ui.version}`];
+    const nodes = [el('span', { text: parts[0] })];
+    if (s.update && s.update.version) {
+      nodes.push(' · ', el('button', { type: 'button', class: 'link-btn', text: `Get version ${s.update.version}`, onclick: () => api.openExternal(RELEASES_URL) }));
+    } else {
+      nodes.push(' · ', el('button', { type: 'button', class: 'link-btn', text: 'Latest version', onclick: () => api.openExternal(RELEASES_URL) }));
+    }
+    els.about.replaceChildren(...nodes);
+  }
 
   // ============================================================== keyboard
 
@@ -1858,7 +2190,7 @@
     ui.suggestedRoom = boot.suggestedRoom;
     ui.inbox = Array.isArray(boot.inbox) ? boot.inbox.map((n) => ({ ...n })) : [];
     ui.unread = Number(boot.unread) || 0;
-    els.about.textContent = `MemeDrop ${boot.version}`;
+    renderAbout();
 
     const s = boot.settings;
     els.opacity.value = String(Math.round((s.opacity || 1) * 100));
@@ -1875,6 +2207,7 @@
     renderSoundSelect();
     renderTextColors();
     renderText();
+    renderPenTools();
     renderThemes();
     switchTab('upload');
 

@@ -37,7 +37,7 @@ test('joining a room returns a welcome with peers, limits and features', async (
     assert.equal(welcome.room, 'PIZZA-GANG', 'room codes are case-insensitive');
     assert.equal(welcome.nickname, 'Alice');
     assert.equal(welcome.protocol, 3);
-    assert.deepEqual(welcome.peers, [{ id: welcome.id, nickname: 'Alice' }]);
+    assert.deepEqual(welcome.peers, [{ id: welcome.id, nickname: 'Alice', version: null }]);
     assert.equal(welcome.limits.maxImageBytes, 5 * 1024 * 1024);
     assert.deepEqual(welcome.limits.positions, ['random', 'center', 'fullscreen']);
     assert.equal(welcome.features.giphy, false);
@@ -599,5 +599,18 @@ test('reactions go only to the person they are for', async () => {
     assert.equal((await a.next('reaction')).emoji, '❤️');
     b.send({ type: 'react', to: a.id, emoji: '🔥' });
     assert.equal((await b.next('error')).code, 'rate_limited');
+  });
+});
+
+test('the roster says which app version each person runs', async () => {
+  await withServer({}, async ({ open }) => {
+    const a = await open();
+    const b = await open();
+    a.send({ type: 'join', room: 'v', nickname: 'Alice', version: '1.3.0' });
+    await a.next('welcome');
+    b.send({ type: 'join', room: 'v', nickname: 'Bob', version: '<script>' });
+    const welcome = await b.next('welcome');
+    const byName = Object.fromEntries(welcome.peers.map((p) => [p.nickname, p.version]));
+    assert.deepEqual(byName, { Alice: '1.3.0', Bob: null });
   });
 });

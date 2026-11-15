@@ -169,6 +169,7 @@
         <p id="inbox-empty" class="inbox-empty">Nothing yet. When friends drop something on you, it shows up here.</p>
       </div>
 
+      <div class="main-scroll" id="main-scroll">
       <section class="send-to">
         <div class="section-title">Send to <span class="section-hint">(click several friends to pick more than one)</span></div>
         <div id="targets" class="chips" role="group" aria-label="Send to"></div>
@@ -179,10 +180,11 @@
       </section>
 
       <nav class="tabs" role="tablist">
-        <button type="button" role="tab" class="tab" data-tab="upload" aria-selected="true">📁 Upload</button>
-        <button type="button" role="tab" class="tab" data-tab="gifs" aria-selected="false">🔍 GIFs</button>
-        <button type="button" role="tab" class="tab" data-tab="text" aria-selected="false">💬 Text</button>
-        <button type="button" role="tab" class="tab" data-tab="sounds" aria-selected="false">🔊 Sounds</button>
+        <button type="button" role="tab" class="tab" data-tab="upload" aria-selected="true"><span class="tab-emoji" aria-hidden="true">📁</span> Upload</button>
+        <button type="button" role="tab" class="tab" data-tab="gifs" aria-selected="false"><span class="tab-emoji" aria-hidden="true">🔍</span> GIFs</button>
+        <button type="button" role="tab" class="tab" data-tab="text" aria-selected="false"><span class="tab-emoji" aria-hidden="true">💬</span> Text</button>
+        <button type="button" role="tab" class="tab" data-tab="draw" aria-selected="false"><span class="tab-emoji" aria-hidden="true">✏️</span> Draw</button>
+        <button type="button" role="tab" class="tab" data-tab="sounds" aria-selected="false"><span class="tab-emoji" aria-hidden="true">🔊</span> Sounds</button>
         <button type="button" role="tab" class="tab tab-narrow" data-tab="favs" aria-selected="false" title="Saved memes and GIFs" aria-label="Saved">⭐</button>
       </nav>
 
@@ -248,6 +250,32 @@
             <input type="checkbox" id="text-rain" /> 🌧️ Make it rain <span class="rain-hint" id="text-rain-hint">(short text or emoji)</span>
           </label>
           <div class="text-stage"><div id="text-preview" class="text-preview c-white">Your message</div></div>
+        </section>
+
+        <!-- Draw -->
+        <section id="panel-draw" class="panel" role="tabpanel" hidden>
+          <div class="draw-tools">
+            <div id="draw-colors" class="color-dots" role="radiogroup" aria-label="Pen color"></div>
+            <div id="draw-sizes" class="draw-sizes" role="radiogroup" aria-label="Pen size">
+              <button type="button" role="radio" data-size="4" title="Thin"><span class="pen pen-s"></span></button>
+              <button type="button" role="radio" data-size="10" title="Medium"><span class="pen pen-m"></span></button>
+              <button type="button" role="radio" data-size="22" title="Thick"><span class="pen pen-l"></span></button>
+            </div>
+            <div class="draw-actions">
+              <button type="button" class="icon-btn small" id="draw-eraser" aria-pressed="false" title="Eraser">🧽</button>
+              <button type="button" class="icon-btn small" id="draw-undo" title="Undo (Ctrl+Z)">↶</button>
+              <button type="button" class="icon-btn small" id="draw-clear" title="Start over">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash" /></svg>
+              </button>
+            </div>
+          </div>
+          <div class="draw-stage" id="draw-stage">
+            <canvas id="draw-canvas" aria-label="Drawing area"></canvas>
+            <p class="draw-hint" id="draw-hint">✏️ Draw here.<br />It lands on their screen with no box around it, like you drew right on it.</p>
+          </div>
+          <div class="draw-foot">
+            <button type="button" class="link-btn" id="draw-save" disabled title="Keep it in your ⭐ saved memes">⭐ Save</button>
+          </div>
         </section>
 
         <!-- Saved -->
@@ -325,12 +353,16 @@
             <label class="check"><input type="checkbox" id="video-full" /> Play the whole clip</label>
           </div>
         </div>
+      </section>
+      </div>
+
+      <footer class="send-bar">
         <div id="selection-summary" class="selection-summary">Pick something to drop.</div>
         <div class="actions">
           <button id="preview-btn" class="btn btn-ghost" type="button" title="Show it on your own screen first">Preview on me</button>
           <button id="send-btn" class="btn btn-primary" type="button" title="Ctrl+Enter"><span class="send-label">Drop it!</span></button>
         </div>
-      </section>
+      </footer>
     </main>
 
     <!-- ================= Settings ================= -->
@@ -388,6 +420,10 @@
             <label for="display-select">Show on</label>
             <select id="display-select"></select>
           </div>
+          <label class="switch-row">
+            <span>Tell me when a new version is out</span>
+            <input type="checkbox" id="check-updates" class="switch" />
+          </label>
           <label class="switch-row" id="startup-row" hidden>
             <span>Start MemeDrop with Windows <span class="setting-sub">(quietly, in the tray)</span></span>
             <input type="checkbox" id="startup-toggle" class="switch" />

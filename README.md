@@ -1,8 +1,8 @@
 # MemeDrop
 
-Drop memes, GIFs, videos, sounds and messages straight onto your friends' screens.
+Drop memes, GIFs, videos, sounds, messages and doodles straight onto your friends' screens.
 
-One friend clicks **Host a room** and sends everyone the invite link. Everyone else clicks it (or pastes it into MemeDrop) and they're in. Pick a friend, a few friends, or everyone, then drop an image, video, GIF, sound or a big text message. It pops up on their screen over whatever they're doing, then disappears. They can react with an emoji, and it pops up on yours.
+One friend clicks **Host a room** and sends everyone the invite link. Everyone else clicks it (or pastes it into MemeDrop) and they're in. Pick a friend, a few friends, or everyone, then drop an image, video, GIF, sound, a big text message or something you drew. It pops up on their screen over whatever they're doing, then disappears. They can react with an emoji, and it pops up on yours.
 
 **No terminal, no config files, no accounts.** Everything is done by clicking in the app.
 
@@ -22,7 +22,7 @@ One friend clicks **Host a room** and sends everyone the invite link. Everyone e
 
 Download the installer, run it, and MemeDrop opens. There's no admin password and nothing to set up.
 
-- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup 1.3.0.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
+- **Get the installer:** on this repo's GitHub page, open **Actions → CI**, click the newest run with a green tick, scroll down to **Artifacts** and download **MemeDrop-Windows-Installer** (a zip with `MemeDrop Setup 1.4.0.exe` inside). Share that `.exe` with your friends however you like (Discord, Google Drive, USB stick).
 - **"Windows protected your PC"?** The installer isn't code-signed, because certificates cost money. Click **More info → Run anyway**.
 
 ### 2. One person hosts
@@ -52,7 +52,8 @@ Anyone in the room can click **Invite** (top bar) to copy the link and bring mor
    - **📁 Upload**: drop an image or video on the box, click to browse, or press **Ctrl+V** to paste a screenshot. Images: PNG, JPG, GIF, WebP up to 5 MB. Videos: MP4 or WebM up to 20 MB.
    - **🔍 GIFs**: trending GIFs and search, powered by GIPHY. Click to select; double-click to send instantly.
    - **💬 Text**: type a message (up to 140 characters), pick a color, and press **Enter**. It lands as big outlined meme text. Tick **🌧️ Make it rain** and a short message or emoji (💀, GG, F) pours down their whole screen instead.
-   - **⭐ Saved**: your favorites. Pick an image, video or GIF, click **⭐ Save**, and it's here next time, a click away (double-click sends it right away). Saved memes stay on your PC.
+   - **✏️ Draw**: scribble something with your mouse (8 colors, 3 pen sizes, eraser, undo with **Ctrl+Z**). It lands on their screen with no box around it, as if you drew right on their screen.
+   - **⭐ Saved**: your favorites. Pick an image, video, GIF or drawing, click **⭐ Save**, and it's here next time, a click away (double-click sends it right away). Saved memes stay on your PC.
    - **🔊 Sounds**: a soundboard (air horn, sad trombone, drum roll, ta-da…), or **upload your own** MP3/WAV/OGG/M4A. Click to hear it, double-click to send it straight away.
 3. Adjust:
    - **Opacity**: from faint (10%) to fully solid (100%).
@@ -81,7 +82,10 @@ Drops pop up with the sender's name in the corner, then fade away. They never st
 | ⚙️ **Settings → Sounds** | Turn friends' sounds off or set the volume. |
 | ⚙️ **Settings → Colors** | Six color themes: Bubblegum, Ocean, Lime, Sunset, Midnight, Light. |
 | ⚙️ **Settings → Incoming memes** | **Show on**: pick which screen memes appear on (if you have more than one). **Start MemeDrop with Windows**: it starts quietly by the clock. |
+| ⚙️ **Settings → Incoming memes → Tell me when a new version is out** | MemeDrop checks now and then whether a newer version has been published, and shows a **Get it** button. It only reads a version number from GitHub; nothing about you is sent. |
 | Tray icon (by the clock) | Right-click for the same quick switches, and **Quit**. |
+
+**Friends on different versions?** If someone in your room has an older MemeDrop, you'll see a note with a **Copy download link** button so you can send them the new installer. Newer stuff (like drawings and reactions) may not show up for them until they update.
 
 <p align="center">
   <img src="docs/themes.png" alt="MemeDrop in the Ocean, Lime and Light themes, and the Settings panel" width="760">

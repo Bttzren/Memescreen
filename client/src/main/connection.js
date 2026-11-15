@@ -17,9 +17,10 @@ const FATAL_JOIN_ERRORS = new Set(['bad_room', 'bad_nickname', 'room_full']);
  *   'drop'   (drop)   – a friend dropped something on us
  */
 class Connection extends EventEmitter {
-  constructor({ WebSocketImpl = WebSocket } = {}) {
+  constructor({ WebSocketImpl = WebSocket, appVersion = null } = {}) {
     super();
     this.WebSocketImpl = WebSocketImpl;
+    this.appVersion = appVersion;
     this.ws = null;
     this.target = null; // { url, room, nickname }
     this.wantConnected = false;
@@ -90,7 +91,9 @@ class Connection extends EventEmitter {
 
     ws.on('open', () => {
       this.armDeadTimer();
-      ws.send(JSON.stringify({ type: 'join', room: this.target.room, nickname: this.target.nickname }));
+      const join = { type: 'join', room: this.target.room, nickname: this.target.nickname };
+      if (this.appVersion) join.version = this.appVersion;
+      ws.send(JSON.stringify(join));
     });
     ws.on('ping', () => this.armDeadTimer());
     ws.on('message', (raw) => {
@@ -158,6 +161,7 @@ class Connection extends EventEmitter {
           room: msg.room,
           nickname: msg.nickname,
           selfId: msg.id,
+          protocol: Number(msg.protocol) || 1,
           peers: Array.isArray(msg.peers) ? msg.peers : [],
           features: { giphy: Boolean(msg.features && msg.features.giphy) },
           limits: { ...DEFAULT_LIMITS, ...(msg.limits || {}) },

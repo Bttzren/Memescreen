@@ -28,6 +28,7 @@ const DEFAULTS = Object.freeze({
   displayId: 'main', // which screen memes appear on
   // App
   theme: 'bubblegum',
+  checkUpdates: true, // ask GitHub now and then whether a newer MemeDrop is out
   panicHotkey: 'CommandOrControl+Shift+X',
   giphyKey: '', // stored encrypted when the OS supports it
 });
