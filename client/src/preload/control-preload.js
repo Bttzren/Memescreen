@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('memedrop', {
   pauseHotkey: (paused) => ipcRenderer.invoke('hotkey:pause', paused),
   setDisplay: (displayId) => ipcRenderer.invoke('display:set', displayId),
   setStartWithOs: (enabled) => ipcRenderer.invoke('startup:set', enabled),
+  setQuickKeys: (enabled) => ipcRenderer.invoke('quickkeys:set', enabled),
   saveGiphyKey: (key) => ipcRenderer.invoke('giphy:save', key),
   // Misc
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),

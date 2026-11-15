@@ -148,7 +148,7 @@
   }
 
   function makeRoom(maxOnScreen) {
-    const drops = [...items.keys()].filter((id) => !items.get(id).el.classList.contains('reaction'));
+    const drops = [...items.keys()].filter((id) => !items.get(id).el.classList.contains('reaction') && !items.get(id).el.classList.contains('drop--notice'));
     while (drops.length >= (maxOnScreen || 6)) remove(drops.shift(), { instant: true });
   }
 
@@ -195,6 +195,19 @@
     report();
     enter(el, 'bounce');
     item.timers.push(setTimeout(() => remove(drop.id), 2600));
+  }
+
+  /** A short note for you (e.g. a quick drop went out). */
+  function addNotice(drop) {
+    const el = document.createElement('div');
+    el.className = 'drop drop--sound drop--notice';
+    el.textContent = drop.text;
+    const item = { el, timers: [], cleanups: [] };
+    items.set(drop.id, item);
+    stage.append(el);
+    report();
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+    item.timers.push(setTimeout(() => remove(drop.id), 1800));
   }
 
   /** Captions in classic meme style, sized to the drop. */
@@ -290,6 +303,10 @@
     if (!drop || !drop.id || items.has(drop.id)) return;
     if (drop.kind === 'reaction') {
       addReaction(drop);
+      return;
+    }
+    if (drop.kind === 'notice') {
+      addNotice(drop);
       return;
     }
     makeRoom(drop.maxOnScreen);

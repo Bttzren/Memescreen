@@ -66,6 +66,8 @@
     startupRow: $('startup-row'),
     startupToggle: $('startup-toggle'),
     checkUpdates: $('check-updates'),
+    quickKeys: $('quick-keys'),
+    quickKeysHelp: $('quick-keys-help'),
     inboxBtn: $('inbox-btn'),
     inboxBadge: $('inbox-badge'),
     inbox: $('inbox'),
@@ -1442,6 +1444,8 @@
           ? el('img', { src, alt: label, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' })
           : el('span', { class: 'fav-blank', text: f.kind === 'video' ? '🎬' : '🖼️' });
         const badge = f.type === 'gif' ? 'GIF' : f.kind === 'video' ? '🎬' : null;
+        const slot = ui.favs.indexOf(f) + 1;
+        const quick = ui.conn && ui.conn.quickKeys && ui.conn.quickKeys.enabled && slot <= 9;
         const tile = el(
           'div',
           {
@@ -1470,6 +1474,7 @@
           [
             picture,
             badge ? el('span', { class: 'fav-badge', text: badge }) : null,
+            quick ? el('span', { class: 'fav-slot', title: `Ctrl+Alt+${slot}`, text: String(slot) }) : null,
             el('button', {
               type: 'button',
               class: 'fav-remove',
@@ -2001,6 +2006,20 @@
       els.displaySelect.value = displays.some((d) => d.id === s.displayId) ? s.displayId : 'main';
     }
     els.checkUpdates.checked = s.checkUpdates !== false;
+    const qk = s.quickKeys || { enabled: false, registered: [] };
+    els.quickKeys.checked = qk.enabled;
+    const slotOf = (n) => (s.hotkey && Hotkey.sameAccelerator(s.hotkey.accelerator, `CommandOrControl+Alt+${n}`, ui.platform) ? String(n) : null);
+    const panicDigit = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(slotOf).find(Boolean);
+    const panicSlot = panicDigit ? [null, panicDigit] : null;
+    const missing = qk.enabled && !qk.paused ? [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => !qk.registered.includes(n) && !(panicSlot && Number(panicSlot[1]) === n)) : [];
+    const notes = [];
+    if (qk.enabled && panicSlot) notes.push(`Ctrl+Alt+${panicSlot[1]} is your panic key, so it clears the screen instead.`);
+    if (missing.length) {
+      notes.push(`Ctrl+Alt+${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} already used by Windows or another app, so ${missing.length === 1 ? 'that one doesn’t' : 'those don’t'} work.`);
+    }
+    els.quickKeysHelp.textContent = notes.length
+      ? notes.join(' ')
+      : 'Your first 9 ⭐ saved memes, in order, go to everyone in the room with your current opacity, duration, position and entrance.';
     renderAbout();
     els.startupRow.hidden = !s.canStartWithOs;
     els.startupToggle.checked = Boolean(s.startWithOs);
@@ -2123,6 +2142,11 @@
   });
   els.startupToggle.addEventListener('change', () => api.setStartWithOs(els.startupToggle.checked));
   els.checkUpdates.addEventListener('change', () => api.updateSettings({ checkUpdates: els.checkUpdates.checked }));
+  els.quickKeys.addEventListener('change', async () => {
+    await api.setQuickKeys(els.quickKeys.checked);
+    if (els.quickKeys.checked) toast('Quick drops on: Ctrl+Alt+1 drops your first saved meme, and so on.', 'success');
+    if (ui.favsLoaded) renderFavs();
+  });
 
   function renderAbout() {
     const s = ui.conn || {};

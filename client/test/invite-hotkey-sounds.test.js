@@ -84,3 +84,12 @@ test('built-in sounds match what the server accepts', () => {
   }
   assert.equal(Sounds.info('nope'), null);
 });
+
+test('sameAccelerator treats Control and CommandOrControl alike (except on a Mac)', () => {
+  const { sameAccelerator } = require('../src/shared/hotkey');
+  assert.equal(sameAccelerator('Control+Alt+3', 'CommandOrControl+Alt+3', 'win32'), true);
+  assert.equal(sameAccelerator('Alt+Ctrl+3', 'CommandOrControl+Alt+3', 'win32'), true);
+  assert.equal(sameAccelerator('Control+Alt+3', 'CommandOrControl+Alt+3', 'darwin'), false);
+  assert.equal(sameAccelerator('Control+Alt+3', 'Control+Alt+4', 'win32'), false);
+  assert.equal(sameAccelerator('', 'Control+Alt+4', 'win32'), false);
+});

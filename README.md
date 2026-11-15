@@ -82,6 +82,7 @@ Drops pop up with the sender's name in the corner, then fade away. They never st
 | ⚙️ **Settings → Sounds** | Turn friends' sounds off or set the volume. |
 | ⚙️ **Settings → Colors** | Six color themes: Bubblegum, Ocean, Lime, Sunset, Midnight, Light. |
 | ⚙️ **Settings → Incoming memes** | **Show on**: pick which screen memes appear on (if you have more than one). **Start MemeDrop with Windows**: it starts quietly by the clock. |
+| ⚙️ **Settings → Quick drops** | Turn on **Ctrl+Alt+1…9** to drop your first 9 ⭐ saved memes on everyone from any app, even mid-game, without opening MemeDrop. A small note on your screen confirms each one. Off until you turn it on. |
 | ⚙️ **Settings → Incoming memes → Tell me when a new version is out** | MemeDrop checks now and then whether a newer version has been published, and shows a **Get it** button. It only reads a version number from GitHub; nothing about you is sent. |
 | Tray icon (by the clock) | Right-click for the same quick switches, and **Quit**. |
 

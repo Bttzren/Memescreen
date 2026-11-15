@@ -72,6 +72,7 @@ function run() {
   let trayHintShown = false;
   let favorites = null;
   let hotkeyPaused = false; // true while Settings is recording a new panic key
+  let quickKeys = { enabled: false, registered: [], paused: false }; // Ctrl+Alt+1–9 → saved memes 1–9
   // What friends sent recently (the 📥 inbox). Lives here so it survives the
   // window being closed (which frees the window's memory).
   const recentIncoming = [];
@@ -153,6 +154,7 @@ function run() {
     hotkey = { accelerator: Hotkey.isPlausibleAccelerator(saved) ? saved : Hotkey.DEFAULT_HOTKEY, ok: false };
     hotkey.ok = registerPanic(hotkey.accelerator);
     if (!hotkey.ok) console.warn(`Could not register ${hotkeyLabel()} (another app may be using it).`);
+    if (settings.get().quickKeys) setQuickKeys(true);
 
     tray.update({
       muted: settings.get().muted,
@@ -347,6 +349,7 @@ function run() {
       appVersion: app.getVersion(),
       update: updateInfo,
       checkUpdates: s.checkUpdates !== false,
+      quickKeys: { enabled: quickKeys.enabled, registered: quickKeys.registered, paused: quickKeys.paused },
       displays: listDisplays(),
       displayId: s.displayId,
       canStartWithOs: CAN_START_WITH_OS,
@@ -668,6 +671,10 @@ function run() {
     // While the settings screen is recording a new shortcut, the old one must
     // not fire (otherwise pressing it again would never reach the recorder).
     ipcMain.handle('hotkey:pause', (_e, paused) => {
+      if (paused) {
+        unregisterQuickKeys(); // so pressing e.g. Ctrl+Alt+1 to try it doesn't drop a meme
+        quickKeys.paused = true;
+      }
       if (paused && hotkey.ok) {
         globalShortcut.unregister(hotkey.accelerator);
         hotkey.ok = false;
@@ -689,6 +696,8 @@ function run() {
       sendState();
       return { ok: true };
     });
+
+    ipcMain.handle('quickkeys:set', (_e, enabled) => setQuickKeys(Boolean(enabled)));
 
     ipcMain.handle('fav:list', () => favorites.list());
     ipcMain.handle('fav:add-file', (_e, input) => guard(() => favorites.addFile(input || {})));
@@ -762,10 +771,84 @@ function run() {
   }
 
   function resumeHotkey() {
-    if (!hotkeyPaused) return;
-    hotkeyPaused = false;
-    if (!hotkey.ok) hotkey.ok = registerPanic(hotkey.accelerator);
+    if (quickKeys.paused) {
+      quickKeys.paused = false;
+      if (quickKeys.enabled) registerQuickKeys(); // after the panic key, which wins a clash
+    }
+    if (hotkeyPaused) {
+      hotkeyPaused = false;
+      if (!hotkey.ok) hotkey.ok = registerPanic(hotkey.accelerator);
+    }
     sendState();
+  }
+
+  // ------------------------------------------------------------ quick drops
+
+  const quickAccel = (n) => `CommandOrControl+Alt+${n}`;
+
+  function unregisterQuickKeys() {
+    for (const n of quickKeys.registered) globalShortcut.unregister(quickAccel(n));
+    quickKeys.registered = [];
+  }
+
+  function registerQuickKeys() {
+    unregisterQuickKeys();
+    for (let n = 1; n <= 9; n += 1) {
+      const accel = quickAccel(n);
+      if (hotkey.ok && Hotkey.sameAccelerator(accel, hotkey.accelerator, process.platform)) continue; // the panic key wins
+      try {
+        if (globalShortcut.register(accel, () => quickDrop(n))) quickKeys.registered.push(n);
+      } catch {
+        /* taken by another app */
+      }
+    }
+  }
+
+  function setQuickKeys(enabled) {
+    quickKeys.enabled = Boolean(enabled);
+    settings.update({ quickKeys: quickKeys.enabled });
+    if (quickKeys.enabled) registerQuickKeys();
+    else unregisterQuickKeys();
+    sendState();
+    return { ok: true, registered: quickKeys.registered };
+  }
+
+  /** A small pill on your own screen, so you know a quick drop worked. */
+  function notifyOnScreen(text) {
+    overlay.show({ id: `n-${crypto.randomBytes(4).toString('hex')}`, kind: 'notice', text });
+  }
+
+  async function quickDrop(n) {
+    if (connection.state.status !== 'connected') {
+      notifyOnScreen("⭐ You're not in a room right now");
+      return;
+    }
+    const item = favorites.list()[n - 1];
+    if (!item) {
+      notifyOnScreen(`⭐ Nothing saved in slot ${n} yet`);
+      return;
+    }
+    const s = settings.get();
+    const base = { opacity: s.opacity, durationMs: s.durationMs, position: s.position, effect: s.effect };
+    let payload;
+    if (item.type === 'gif') {
+      payload = { kind: 'gif', url: item.url, width: item.width, height: item.height, title: item.title, ...base };
+    } else {
+      const bytes = favorites.read(item.id);
+      if (!bytes) {
+        notifyOnScreen(`⭐ Saved meme ${n} is missing`);
+        return;
+      }
+      payload = { kind: item.kind, bytes, ...base, videoSound: s.videoSound };
+    }
+    try {
+      const drop = buildOutgoingDrop(payload, connection.state.limits);
+      const reply = await connection.request({ type: 'drop', to: 'all', ...drop });
+      const who = reply.delivered === 1 ? '1 friend' : `${reply.delivered} friends`;
+      notifyOnScreen(reply.delivered ? `⭐ ${n} dropped on ${who}` : '⭐ Nobody else is in the room');
+    } catch (err) {
+      notifyOnScreen(`⭐ ${err.message}`);
+    }
   }
 
   function pickDisplay(displayId) {

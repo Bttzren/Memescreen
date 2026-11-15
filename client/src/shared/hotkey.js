@@ -128,5 +128,26 @@
     return /^([A-Z0-9]|F\d{1,2}|num\d|numadd|numsub|nummult|numdiv|numdec|Space|Tab|Backspace|Delete|Insert|Enter|Home|End|PageUp|PageDown|Up|Down|Left|Right|Pause|Scrolllock|PrintScreen|[-=[\]\\;',./`])$/.test(key);
   }
 
-  return { DEFAULT_HOTKEY, eventToAccelerator, acceleratorLabel, isPlausibleAccelerator, codeToKey };
+  /**
+   * Do two accelerators mean the same keys? ("Control+Alt+3" and
+   * "CommandOrControl+Alt+3" do, except on a Mac.)
+   */
+  function sameAccelerator(a, b, platform) {
+    const norm = (acc) =>
+      String(acc || '')
+        .split('+')
+        .map((t) => {
+          const k = t.trim().toLowerCase();
+          if (k === 'commandorcontrol' || k === 'cmdorctrl') return platform === 'darwin' ? 'command' : 'control';
+          if (k === 'ctrl') return 'control';
+          if (k === 'cmd' || k === 'super' || k === 'meta') return 'command';
+          if (k === 'option') return 'alt';
+          return k;
+        })
+        .sort()
+        .join('+');
+    return Boolean(a) && Boolean(b) && norm(a) === norm(b);
+  }
+
+  return { DEFAULT_HOTKEY, eventToAccelerator, acceleratorLabel, isPlausibleAccelerator, codeToKey, sameAccelerator };
 });

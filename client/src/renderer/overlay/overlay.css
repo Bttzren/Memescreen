@@ -294,3 +294,12 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .rain-bit { animation: none; transform: translateY(40vh); }
 }
+
+/* ---------- Notes for you (quick drops) ---------- */
+.drop--notice {
+  top: auto;
+  bottom: 28px;
+  font-size: 14px;
+  padding: 8px 16px;
+  background: rgba(123, 47, 247, 0.9);
+}
