@@ -54,7 +54,7 @@ Anyone in the room can click **Invite** (top bar) to copy the link and bring mor
    - **💬 Text**: type a message (up to 140 characters), pick a color, and press **Enter**. It lands as big outlined meme text. Tick **🌧️ Make it rain** and a short message or emoji (💀, GG, F) pours down their whole screen instead.
    - **✏️ Draw**: scribble something with your mouse (8 colors, 3 pen sizes, eraser, undo with **Ctrl+Z**). It lands on their screen with no box around it, as if you drew right on their screen.
    - **⭐ Saved**: your favorites. Pick an image, video, GIF or drawing, click **⭐ Save**, and it's here next time, a click away (double-click sends it right away). Saved memes stay on your PC.
-   - **🔊 Sounds**: a soundboard (air horn, sad trombone, drum roll, ta-da…), or **upload your own** MP3/WAV/OGG/M4A. Click to hear it, double-click to send it straight away.
+   - **🔊 Sounds**: a soundboard of 15 sounds (air horn, sad trombone, ba-dum-tss, crickets, wrong buzzer, boom…), or **upload your own** MP3/WAV/OGG/M4A. Click to hear it, double-click to send it straight away.
 3. Adjust:
    - **Opacity**: from faint (10%) to fully solid (100%).
    - **Duration**: 1–15 seconds. For videos you can tick **Play the whole clip** instead (up to 60 seconds).

@@ -23,6 +23,11 @@
     { id: 'siren', label: 'Siren', emoji: '🚨' },
     { id: 'toot', label: 'Toot', emoji: '😳' },
     { id: 'pop', label: 'Pop', emoji: '🎈' },
+    { id: 'boom', label: 'Boom', emoji: '💥' },
+    { id: 'rimshot', label: 'Ba-dum-tss', emoji: '🥁' },
+    { id: 'crickets', label: 'Crickets', emoji: '🦗' },
+    { id: 'buzzer', label: 'Wrong buzzer', emoji: '❌' },
+    { id: 'slide-whistle', label: 'Slide whistle', emoji: '🪈' },
   ];
 
   const noiseCache = new WeakMap();
@@ -286,9 +291,97 @@
       o.frequency.exponentialRampToValueAtTime(140, t + 0.12);
       return 0.25;
     },
+
+    // A deep, dramatic "boom" with a little grit.
+    boom(k, t) {
+      const drive = distortion(k.ctx, 6);
+      drive.connect(k.out);
+      const lp = k.filter('lowpass', 900, 0.7, drive);
+      const g = k.gain(0, lp);
+      k.env(g, t, 0.004, 0.08, 1.5, 0.9);
+      const o = k.osc('sine', 120, t, t + 1.7, g);
+      o.frequency.exponentialRampToValueAtTime(38, t + 1.1);
+      const sub = k.osc('triangle', 60, t, t + 1.7, g);
+      sub.frequency.exponentialRampToValueAtTime(30, t + 1.2);
+      const ng = k.gain(0, k.filter('lowpass', 260, 0.8, lp));
+      k.env(ng, t, 0.002, 0.03, 0.35, 0.7);
+      k.noise(t, t + 0.45, ng);
+      return 1.75;
+    },
+
+    // Ba-dum-tss: two toms and a cymbal.
+    rimshot(k, t) {
+      for (const [start, f] of [
+        [0, 210],
+        [0.17, 160],
+      ]) {
+        const g = k.gain(0);
+        k.env(g, t + start, 0.002, 0.02, 0.22, 0.8);
+        const o = k.osc('sine', f, t + start, t + start + 0.3, g);
+        o.frequency.exponentialRampToValueAtTime(f * 0.55, t + start + 0.2);
+        const sg = k.gain(0, k.filter('bandpass', 2200, 1.2));
+        k.env(sg, t + start, 0.001, 0.005, 0.05, 0.25);
+        k.noise(t + start, t + start + 0.08, sg);
+      }
+      const c = t + 0.42;
+      const cg = k.gain(0, k.filter('highpass', 6500, 0.7));
+      k.env(cg, c, 0.002, 0.05, 0.9, 0.5);
+      k.noise(c, c + 1, cg);
+      return 1.45;
+    },
+
+    // Awkward silence: a couple of crickets chirping.
+    crickets(k, t) {
+      const hp = k.filter('highpass', 3000, 0.7);
+      for (const [pitch, offset] of [
+        [4300, 0],
+        [4700, 0.27],
+      ]) {
+        for (let group = 0; group < 4; group += 1) {
+          const g0 = t + offset + group * 0.55;
+          for (let p = 0; p < 4; p += 1) {
+            const s = g0 + p * 0.042;
+            const g = k.gain(0, hp);
+            k.env(g, s, 0.004, 0.012, 0.012, 0.35);
+            k.osc('sine', pitch, s, s + 0.04, g);
+          }
+        }
+      }
+      return 2.25;
+    },
+
+    // "Wrong answer" game-show buzzer.
+    buzzer(k, t) {
+      const lp = k.filter('lowpass', 1100, 0.9);
+      const g = k.gain(0, lp);
+      k.env(g, t, 0.01, 0.75, 0.12, 0.35);
+      k.osc('square', 148, t, t + 0.9, g);
+      k.osc('sawtooth', 152, t, t + 0.9, g);
+      k.osc('square', 74, t, t + 0.9, g);
+      return 0.92;
+    },
+
+    // Slide whistle up, then back down.
+    'slide-whistle'(k, t) {
+      const g = k.gain(0);
+      k.env(g, t, 0.03, 0.85, 0.12, 0.5);
+      const o = k.osc('sine', 650, t, t + 1.05, g);
+      o.frequency.setValueAtTime(650, t);
+      o.frequency.exponentialRampToValueAtTime(1900, t + 0.55);
+      o.frequency.exponentialRampToValueAtTime(800, t + 0.95);
+      const lfo = k.osc('sine', 6, t, t + 1.05, false);
+      const depth = k.ctx.createGain();
+      depth.gain.value = 25;
+      lfo.connect(depth);
+      depth.connect(o.frequency);
+      const breath = k.gain(0, k.filter('bandpass', 2000, 0.8));
+      k.env(breath, t, 0.03, 0.8, 0.12, 0.04);
+      k.noise(t, t + 1, breath);
+      return 1.05;
+    },
   };
 
-  // Per-sound level so they all sound about equally loud (measured RMS ≈ 0.1).
+  // Per-sound level so they all sound about equally loud (offline-rendered RMS 0.07–0.25).
   const LEVEL = {
     airhorn: 0.3,
     boing: 1,
@@ -300,6 +393,11 @@
     siren: 0.7,
     toot: 0.6,
     pop: 1.1,
+    boom: 0.5,
+    rimshot: 1,
+    crickets: 1,
+    buzzer: 0.4,
+    'slide-whistle': 0.46,
   };
 
   function info(id) {

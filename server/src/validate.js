@@ -84,6 +84,11 @@ const BUILTIN_SOUNDS = Object.freeze([
   'siren',
   'toot',
   'pop',
+  'boom',
+  'rimshot',
+  'crickets',
+  'buzzer',
+  'slide-whistle',
 ]);
 
 /** How a drop arrives on screen. */
